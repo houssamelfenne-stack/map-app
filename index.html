@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#1f77b4" />
+    <meta name="description" content="منصة خريطة تفاعلية لعرض وتحليل المؤسسات الصحية" />
+    <title>منصة الخريطة التفاعلية للصحة العمومية — تحليل المؤسسات</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;600;700&display=swap" />
+    <link rel="stylesheet" href="style.css?v=20260310-chatbot-3" />
+  </head>
+  <body class="landing-open">
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay">
+      <div class="loading-spinner" role="status" aria-live="polite" aria-busy="true">
+        <div class="loading-logo-shell">
+          <img src="logo-main.png" alt="شعار المنصة" class="loading-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+          <div class="loading-logo-fallback" style="display:none;"><i class="fas fa-map-location-dot"></i></div>
+        </div>
+        <div class="loading-progress-track" aria-hidden="true">
+          <span class="loading-progress-indeterminate"></span>
+        </div>
+        <div class="loading-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="loading-meta">
+          <p id="loadingStageText">جارٍ تحميل البيانات...</p>
+          <span id="loadingPercentText">0%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Landing Hero -->
+    <section id="mainLanding" class="main-landing" aria-label="الواجهة الرئيسية">
+      <div class="landing-content">
+        <div class="landing-badge">منصة تفاعلية وطنية</div>
+        <h2 class="landing-title">بوابة استكشاف خريطة المؤسسات الصحية</h2>
+        <p class="landing-description">
+          تتبع توزع المؤسسات الصحية حسب الجهة والإقليم والجماعة، مع أدوات بحث وتحليل وتصدير في واجهة واحدة.
+        </p>
+
+        <div class="landing-stats" aria-label="إحصائيات سريعة">
+          <div class="landing-stat">
+            <span class="landing-stat-label">إجمالي المؤسسات</span>
+            <span id="landingInstitutions" class="landing-stat-value">0</span>
+          </div>
+          <div class="landing-stat">
+            <span class="landing-stat-label">الشبكات المتاحة</span>
+            <span id="landingNetworks" class="landing-stat-value">0</span>
+          </div>
+          <div class="landing-stat">
+            <span class="landing-stat-label">الجهات المغطاة</span>
+            <span id="landingRegions" class="landing-stat-value">0</span>
+          </div>
+          <div class="landing-stat">
+            <span class="landing-stat-label">الأقاليم المغطاة</span>
+            <span id="landingProvinces" class="landing-stat-value">0</span>
+          </div>
+          <div class="landing-stat landing-stat-population">
+            <span class="landing-stat-label">الساكنة</span>
+            <span id="landingPopulation" class="landing-stat-value">0</span>
+            <div class="landing-stat-details">
+              <span><strong id="landingPopulationMoroccans">0</strong> <span id="landingPopulationMoroccansLabel">المغاربة</span></span>
+              <span><strong id="landingPopulationForeigners">0</strong> <span id="landingPopulationForeignersLabel">الأجانب</span></span>
+              <span><strong id="landingPopulationHouseholds">0</strong> <span id="landingPopulationHouseholdsLabel">الأسر</span></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="landing-highlights">
+          <article class="landing-card">
+            <i class="fas fa-location-dot"></i>
+            <h3>عرض جغرافي دقيق</h3>
+            <p>خريطة تفاعلية بطبقات المحافظات والجماعات.</p>
+          </article>
+          <article class="landing-card">
+            <i class="fas fa-magnifying-glass"></i>
+            <h3>بحث فوري</h3>
+            <p>الوصول السريع إلى المؤسسات والمواقع المطلوبة.</p>
+          </article>
+          <article class="landing-card">
+            <i class="fas fa-table"></i>
+            <h3>تحليل وتصدير</h3>
+            <p>جدول تحليلي مع تصدير CSV و Excel بسهولة.</p>
+          </article>
+        </div>
+
+        <button id="startMapBtn" class="start-map-btn" type="button">
+          <i class="fas fa-map"></i>
+          ابدأ استكشاف الخريطة
+        </button>
+
+        <div class="landing-actions-row">
+          <button id="startWithTableBtn" class="landing-secondary-btn" type="button">
+            <i class="fas fa-table"></i>
+            دخول مع الجدول
+          </button>
+          <button id="startWithSearchBtn" class="landing-secondary-btn" type="button">
+            <i class="fas fa-magnifying-glass"></i>
+            دخول مع البحث
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="title-search-row">
+          <h1 class="app-title">
+            <img src="logo-main.png" alt="شعار منصة الخريطة التفاعلية للصحة العمومية" class="app-logo" onerror="this.style.display='none'">
+            <span id="appTitleText">منصة الخريطة التفاعلية للصحة العمومية</span>
+          </h1>
+          <div id="searchPanel" class="search-panel">
+            <div class="search-container">
+              <i class="fas fa-search search-icon"></i>
+              <input 
+                type="text" 
+                id="searchInput" 
+                class="search-input" 
+                placeholder="ابحث عن مؤسسة، جماعة، إقليم..."
+                aria-label="البحث عن المؤسسات"
+              />
+              <button id="clearSearchBtn" class="clear-search" title="مسح البحث" aria-label="مسح">
+                <i class="fas fa-times"></i>
+              </button>
+            </div>
+            <div id="searchResults" class="search-results" style="display:none;"></div>
+          </div>
+        </div>
+        <p id="headerSubtitle" class="header-subtitle">تحليل وعرض المؤسسات الصحية والخدمية</p>
+      </div>
+      <div class="header-stats">
+        <div class="stat-item">
+          <span id="totalInstitutionsLabel" class="stat-label">المؤسسات:</span>
+          <span id="totalInstitutions" class="stat-value">0</span>
+        </div>
+        <div class="stat-item">
+          <span id="totalNetworksLabel" class="stat-label">الشبكات:</span>
+          <span id="totalNetworks" class="stat-value">0</span>
+        </div>
+        <div class="stat-item">
+          <span id="totalRegionsLabel" class="stat-label">الجهات:</span>
+          <span id="totalRegions" class="stat-value">0</span>
+        </div>
+        <div class="stat-item">
+          <span id="totalProvincesLabel" class="stat-label">الأقاليم:</span>
+          <span id="totalProvinces" class="stat-value">0</span>
+        </div>
+        <div class="stat-item">
+          <span id="totalPopulationLabel" class="stat-label">عدد السكان:</span>
+          <span id="totalPopulation" class="stat-value">0</span>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="languageToggleBtn" class="header-btn" title="Changer la langue" aria-label="تغيير اللغة">
+          <i class="fas fa-language"></i>
+          <span id="languageToggleLabel">FR</span>
+        </button>
+        <button id="themeToggleBtn" class="header-btn" title="تفعيل الوضع الداكن" aria-label="تبديل الوضع الداكن">
+          <i id="themeToggleIcon" class="fas fa-moon"></i>
+        </button>
+        <button id="chatbotToggleBtn" class="header-btn chatbot-toggle-btn" type="button" aria-label="مساعد البيانات الصحية" title="مساعد البيانات الصحية">
+          <i class="fas fa-comments"></i>
+          <span id="chatbotToggleLabel">مساعد الصحة</span>
+        </button>
+        <button id="helpBtn" class="header-btn" title="المساعدة والاختصارات" aria-label="المساعدة">
+          <i class="fas fa-question-circle"></i>
+        </button>
+        <button id="routeModeBtn" class="header-btn" title="حساب المسافة والوقت بين مؤسستين" aria-label="حساب المسار">
+          <i class="fas fa-route"></i>
+        </button>
+        <button id="captureMapBtn" class="header-btn" title="حفظ صورة الخريطة PNG" aria-label="حفظ صورة الخريطة">
+          <i class="fas fa-camera"></i>
+        </button>
+      </div>
+    </header>
+
+    <div id="app-container" class="map-only">
+      <aside id="pivotPanel" class="pivot-panel" aria-hidden="true">
+        <div class="pivot-header">
+          <strong id="pivotPanelTitle">احصائيات العرض الصحي</strong>
+          <div class="pivot-header-actions">
+            <button id="downloadCsvBtn" class="export-btn" title="تنزيل CSV"><i class="fas fa-download"></i> CSV</button>
+            <button id="toggleZerosBtn" class="toggle-zeros-btn" title="عرض الصفوف الفارغة">0️⃣ عرض أصفار</button>
+            <button id="exportExcelBtn" class="export-btn" title="تصدير Excel"><i class="fas fa-file-excel"></i>XLSX</button>
+            <button id="printTableBtn" class="export-btn" title="طباعة"><i class="fas fa-print"></i></button>
+            <button id="closePivot" class="close-pivot" aria-label="إغلاق">✕</button>
+          </div>
+        </div>
+        <div id="pivotContent" class="pivot-content">جارٍ التحضير…</div>
+      </aside>
+
+      <div id="map"></div>
+      <div id="routeInfoPanel" class="route-info-panel" style="display:none;"></div>
+      <div id="legend" class="legend"></div>
+      <div id="pivotQuickActions" class="pivot-quick-actions" aria-label="أزرار الإحصائيات">
+        <button id="togglePivotBtn" class="toggle-pivot" title="إحصائيات العرض الصحي"><i class="fas fa-table"></i> <span id="togglePivotBtnText">احصائيات العرض الصحي</span></button>
+        <button id="togglePivotProvinceBtn" class="toggle-pivot" title="إحصائيات الاقاليم"><i class="fas fa-chart-column"></i> <span id="togglePivotProvinceBtnText">احصائيات الاقاليم</span></button>
+        <button id="togglePivotCommuneBtn" class="toggle-pivot" title="إحصائيات الجماعات"><i class="fas fa-chart-bar"></i> <span id="togglePivotCommuneBtnText">احصائيات الجماعات</span></button>
+        <button id="togglePivotPopulationBtn" class="toggle-pivot" title="إحصائيات سكان RGPH 2024"><i class="fas fa-people-group"></i> <span id="togglePivotPopulationBtnText">إحصائيات سكان RGPH 2024</span></button>
+      </div>
+    </div>
+
+    <section id="chatbotPanel" class="chatbot-panel" aria-label="مساعد البيانات" aria-hidden="true">
+      <div class="chatbot-header">
+        <div class="chatbot-title-wrap">
+          <strong id="chatbotTitle">مساعد البيانات الصحية</strong>
+          <span id="chatbotCloudBadge" class="chatbot-cloud-badge">Cloud: -- | Azure: --</span>
+        </div>
+        <div class="chatbot-header-actions">
+          <button id="chatbotExportBtn" class="chatbot-export-btn" type="button" aria-label="تصدير المحادثة">CSV</button>
+          <button id="chatbotExpertModeBtn" class="chatbot-expert-btn" type="button" aria-label="تفعيل الوضع الخبير">Expert: OFF</button>
+          <button id="chatbotCloseBtn" class="chatbot-close-btn" type="button" aria-label="إغلاق">✕</button>
+        </div>
+      </div>
+      <div id="chatbotMessages" class="chatbot-messages" role="log" aria-live="polite"></div>
+      <div class="chatbot-input-wrap">
+        <input id="chatbotInput" class="chatbot-input" type="text" placeholder="اسأل عن السكان، العرض الصحي أو برامج OMS..." />
+        <button id="chatbotSendBtn" class="chatbot-send-btn" type="button">إرسال</button>
+      </div>
+    </section>
+
+    <!-- Help Modal -->
+    <div id="helpModal" class="modal" style="display:none;">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>المساعدة والاختصارات</h2>
+          <button class="modal-close" aria-label="إغلاق">✕</button>
+        </div>
+        <div class="modal-body">
+          <h3>لوحات المفاتيح المتاحة:</h3>
+          <table class="shortcuts-table">
+            <tr><td><kbd>Ctrl + F</kbd></td><td>البحث عن مؤسسة</td></tr>
+            <tr><td><kbd>Ctrl + T</kbd></td><td>إظهار/إخفاء الجدول</td></tr>
+            <tr><td><kbd>Ctrl + S</kbd></td><td>إظهار/إخفاء الإحصائيات</td></tr>
+            <tr><td><kbd>Ctrl + E</kbd></td><td>تصدير Excel</td></tr>
+            <tr><td><kbd>Ctrl + P</kbd></td><td>طباعة الجدول</td></tr>
+            <tr><td><kbd>Escape</kbd></td><td>إغلاق البحث</td></tr>
+          </table>
+          <hr />
+          <h3>نصائح الاستخدام:</h3>
+          <ul>
+            <li>استخدم البحث في الأعلى للعثور على مؤسسات محددة</li>
+            <li>اضغط على النقاط على الخريطة لعرض التفاصيل</li>
+            <li>استخدم الجدول التحليلي للمقارنات والتصدير</li>
+            <li>الإحصائيات توفر نظرة عامة على البيانات</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Leaflet + MarkerCluster -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+    <script src="https://unpkg.com/leaflet-polylinedecorator@1.7.0/dist/leaflet.polylineDecorator.min.js"></script>
+    <!-- SheetJS for .xlsx export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- DOMPurify for security -->
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
+    <!-- html2canvas for map PNG export -->
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="app.js?v=20260310-chatbot-8"></script>
+
+    <footer class="app-footer" aria-label="حقوق النشر">
+      <span>&copy; <span id="copyrightYear"></span> Houssam El Fenne. جميع الحقوق محفوظة.</span>
+    </footer>
+    <script>
+      document.getElementById('copyrightYear').textContent = new Date().getFullYear();
+    </script>
+  </body>
+</html>

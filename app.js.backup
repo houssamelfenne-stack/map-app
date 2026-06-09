@@ -1,0 +1,484 @@
+// خريطة تفاعلية: عرض محافظات، جماعات ومؤسسات مُلوّنة حسب `reseau` (koulchi.json)
+const map = L.map('map').setView([31.5, -7.5], 6);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19,
+  attribution: '© OpenStreetMap'
+}).addTo(map);
+
+// متغير عام لحفظ تعيين المقاطعات والأقاليم (سيتم ملؤه عند تحميل koulchi.json)
+let provinceToRegionMap = {};
+
+const provincesLayer = L.geoJSON(null, {
+  style: { color: '#333', weight: 2, fillOpacity: 0.03 },
+  onEachFeature: (f, l) => {
+    const name = f.properties && (f.properties.NAME_1 || f.properties.name || f.properties.NAME);
+    const region = name && provinceToRegionMap[name] ? provinceToRegionMap[name] : 'غير محدد';
+    l.bindPopup(`<strong>Province</strong><br/>${name || '—'}<br/><small>Région: ${region}</small>`);
+  }
+}).addTo(map);
+
+const communesLayer = L.geoJSON(null, {
+  style: { color: '#666', weight: 1, fillOpacity: 0.01 },
+  onEachFeature: (f, l) => {
+    const name = f.properties && (f.properties.NAME_2 || f.properties.NAME_1 || f.properties.NAME);
+    l.bindPopup(`<strong>Commune</strong><br/>${name || '—'}`);
+  }
+}).addTo(map);
+
+const markersCluster = L.markerClusterGroup({chunkedLoading: true});
+// ألوان ثابتة للمجموعات المطلوبة (بما في ذلك الاختصارات)
+const predefinedReseauColors = {
+  'Réseau des Etablissements de Soins de Santé Primaire': '#ff7f0e', // برتقالي
+  'RESSP': '#ff7f0e',
+  'Réseau Hospitalier': '#1f77b4', // أزرق
+  'RH': '#1f77b4',
+  "Réseau Intégré des Soins d'Urgence Médicale": '#d62728', // أحمر
+  'RISUM': '#d62728',
+  'Réseau des Etablissements Médico-Sociaux': '#2ca02c', // أخضر
+  'REMS': '#2ca02c'
+};
+
+let allMarkers = [];
+// حالة عرض صفوف ذات القيمة صفر
+let showZeroRows = false;
+// نُبقي الأسماء المعرفة مسبقاً في الخريطة حتى تظهر في legend حتى لو لم تكن مُستخرجة بعد
+let reseauColors = Object.assign({}, predefinedReseauColors);
+const palette = ['#9467bd','#8c564b','#e377c2','#7f7f7f','#bcbd22','#17becf','#aec7e8','#ffbb78'];
+function colorForReseau(name){
+  if(!name) return '#999';
+  // تحقق أولاً من الأسماء/الاختصارات المعرفة مسبقاً
+  if(predefinedReseauColors[name]){
+    reseauColors[name] = predefinedReseauColors[name];
+    return predefinedReseauColors[name];
+  }
+  if(!reseauColors[name]) reseauColors[name] = palette[Object.keys(reseauColors).length % palette.length];
+  return reseauColors[name];
+}
+
+// تحميل طبقات GeoJSON
+fetch('province.geojson').then(r=>r.json()).then(data=>{ provincesLayer.addData(data); map.fitBounds(provincesLayer.getBounds()); }).catch(e=>console.warn('province.geojson load failed (big file?)', e));
+fetch('communes.geojson').then(r=>r.json()).then(data=>{ communesLayer.addData(data); }).catch(e=>console.warn('communes.geojson load failed', e));
+
+// تحميل المؤسسات من koulchi.json
+fetch('koulchi.json').then(r=>r.json()).then(list=>{
+  // بناء خريطة تعيين المقاطعات والأقاليم
+  list.forEach(item => {
+    const province = item.province || item.province_name || '';
+    const region = item.region || '';
+    if(province && region && !provinceToRegionMap[province]) {
+      provinceToRegionMap[province] = region;
+    }
+  });
+
+  const reseauSet = new Set();
+  list.forEach(item=>{
+    const lat = parseFloat(item.latitude || item.lat || item.Lat || item.y);
+    const lon = parseFloat(item.longitude || item.lon || item.Long || item.x);
+    if(!isFinite(lat) || !isFinite(lon)) return;
+    const reseau = item.reseau || item['abr_reseau'] || 'غير معروف';
+    reseauSet.add(reseau);
+    const color = colorForReseau(reseau);
+
+    const marker = L.circleMarker([lat, lon], {
+      radius: 6,
+      weight: 1,
+      color: '#222',
+      fillColor: color,
+      fillOpacity: 0.9
+    });
+
+    const popup = `
+      <strong>${(item.nom_etab || item.nom || item.key) || 'اسم مجهول'}</strong><br/>
+      <small>categorie: ${(item.categorie||item.abr_categorie||'—')}</small><br/>
+      <small>reseau: ${reseau}</small><br/>
+      <small>commune: ${item.commune||item.cs||'—'}</small>
+    `;
+    marker.bindPopup(popup);
+    marker.reseau = reseau; // للفلترة
+    allMarkers.push(marker);
+    markersCluster.addLayer(marker);
+  });
+
+  map.addLayer(markersCluster);
+  updateLegend();
+  // ملء جدول الـ Pivot مباشرة بعد تحميل البيانات
+  if(typeof createPivot === 'function') createPivot(list);
+}).catch(e=>{ console.error('فشل تحميل koulchi.json', e); });
+
+// فلتر الشبكة (تمت إزالته من الواجهة)
+
+// وسيلة إيضاح (Legend)
+function updateLegend(){
+  const div = document.getElementById('legend');
+  div.innerHTML = '<strong>الشبكات (reseau)</strong><hr/>'; 
+
+  // لا نُظهر الاختصارات في المفتاح — نترجمها إلى الأسماء الكاملة عند العرض
+  const abbrevToFull = {
+    'RESSP': 'Réseau des Etablissements de Soins de Santé Primaire',
+    'RH': 'Réseau Hospitalier',
+    'RISUM': "Réseau Intégré des Soins d'Urgence Médicale",
+    'REMS': 'Réseau des Etablissements Médico-Sociaux'
+  };
+
+  // نجمع مدخلات للعرض: مفتاح العرض -> لون
+  const displayMap = new Map();
+  Object.keys(reseauColors).forEach(k => {
+    if (abbrevToFull[k]) {
+      // إذا كان المفتاح اختصاراً، نستخدم الاسم الكامل كبند عرض ونأخذ لونه
+      displayMap.set(abbrevToFull[k], reseauColors[k]);
+    } else if (Object.values(abbrevToFull).includes(k)) {
+      // المفتاح هو اسم كامل فعلي
+      displayMap.set(k, reseauColors[k]);
+    } else {
+      // شبكات أخرى نعرضها كما هي
+      displayMap.set(k, reseauColors[k]);
+    }
+  });
+
+  // نضمن ترتيب ثابت للبنود المعروفة (إن وُجدت)
+  const preferredOrder = [
+    'Réseau des Etablissements de Soins de Santé Primaire',
+    'Réseau Hospitalier',
+    "Réseau Intégré des Soins d'Urgence Médicale",
+    'Réseau des Etablissements Médico-Sociaux'
+  ];
+
+  const shown = new Set();
+  preferredOrder.forEach(name => {
+    if (displayMap.has(name)) {
+      const color = displayMap.get(name);
+      div.innerHTML += `<div class="item"><span class="swatch" style="background:${color}"></span><span>${name}</span></div>`;
+      shown.add(name);
+    }
+  });
+
+  // ثم بقية الشبكات بالترتيب الأبجدي
+  Array.from(displayMap.keys()).sort().forEach(name => {
+    if (shown.has(name)) return;
+    const color = displayMap.get(name);
+    div.innerHTML += `<div class="item"><span class="swatch" style="background:${color}"></span><span>${name}</span></div>`;
+  });
+
+  if (displayMap.size === 0) div.innerHTML += '<div>لا توجد بيانات بعد</div>';
+}
+
+// إضافة/إزالة طبقات عبر تحكم الخريطة
+const overlays = { 'Provinces': provincesLayer, 'Communes': communesLayer, 'المؤسسات (Clustered)': markersCluster };
+L.control.layers(null, overlays, {collapsed:false, position: 'bottomright'}).addTo(map);
+
+// ------------------------
+// Tableau croisé dynamique (Pivot)
+// - صفوف: جهة > إقليم > جماعة
+// - أعمدة: قائمة التصنيفات (categorie) ثم الشبكات (reseau)
+// يظهر في اللوحة الجانبية التي تأخذ 50% من الشاشة عند العرض
+// ------------------------
+function buildPivotData(list){
+  const categories = new Set();
+  const reseaux = new Set();
+  const agg = new Map(); // region -> province -> commune -> { total, byCategory, byReseau }
+
+  list.forEach(item => {
+    const region = item.region || 'غير محدد';
+    const province = item.province || item.province_name || '—';
+    const commune = item.commune || item.cs || '—';
+    const categorie = item.categorie || item.abr_categorie || 'غير معرف';
+    const reseau = item.reseau || item.abr_reseau || 'غير معروف';
+
+    categories.add(categorie);
+    reseaux.add(reseau);
+
+    if(!agg.has(region)) agg.set(region, new Map());
+    const provMap = agg.get(region);
+    if(!provMap.has(province)) provMap.set(province, new Map());
+    const commMap = provMap.get(province);
+    if(!commMap.has(commune)) commMap.set(commune, { total:0, byCategory: new Map(), byReseau: new Map(), byCategoryReseau: new Map() });
+
+    const cell = commMap.get(commune);
+    cell.total += 1;
+    cell.byCategory.set(categorie, (cell.byCategory.get(categorie) || 0) + 1);
+    cell.byReseau.set(reseau, (cell.byReseau.get(reseau) || 0) + 1);
+
+    // عد مشترك: (categorie -> (reseau -> count)) لتسهيل فلترة التصنيفات لاحقاً
+    let catResMap = cell.byCategoryReseau.get(categorie);
+    if(!catResMap){ catResMap = new Map(); cell.byCategoryReseau.set(categorie, catResMap); }
+    catResMap.set(reseau, (catResMap.get(reseau) || 0) + 1);
+  });
+
+  return { agg, categories: Array.from(categories).sort(), reseaux: Array.from(reseaux).sort() };
+}
+
+function renderPivotTable(agg, categories, reseaux, selectedCategories){
+  const container = document.getElementById('pivotContent');
+  if(!container) return;
+
+  // سلوك منطقي للفلتر:
+  // - إذا لم يتم تمرير selectedCategories (undefined/null) => نُظهر كل التصنيفات (التحميل الابتدائي)
+  // - إذا مرّرنا مجموعة فارغة => نُظهر نتائج فارغة (المستخدم اختار "Aucun")
+  const selectedSet = (typeof selectedCategories === 'undefined' || selectedCategories === null) ? new Set(categories) : selectedCategories;
+
+  // حساب rowspans لكل جهة وإقليم (حسب showZeroRows)
+  const regionRows = new Map();
+  const provRows = new Map();
+  agg.forEach((provMap, region) => {
+    let regionCount = 0;
+    provMap.forEach((commMap, prov) => {
+      let provCount = 0;
+      commMap.forEach((cell, comm) => {
+        let totalForComm = 0;
+        if (selectedSet.size === categories.length) {
+          totalForComm = cell.total;
+        } else {
+          selectedSet.forEach(cat => { totalForComm += (cell.byCategory.get(cat) || 0); });
+        }
+        // إذا كنا نعرض صفوف الصفر نعد كل الجماعات، وإلا نعد فقط التي >0
+        if (showZeroRows || totalForComm > 0) provCount++;
+      });
+      provRows.set(region + '||' + prov, provCount);
+      regionCount += provCount;
+    });
+    regionRows.set(region, regionCount);
+  });
+
+  // بناء واجهة فلتر التصنيفات + الجدول (نُزيل أعمدة التصنيف من الجدول)
+  let html = '';
+
+  // --- فلتر التصنيفات فوق الجدول (checkbox-dropdown searchable) ---
+  html += '<div class="pivot-actions">';
+  html += `<div class="category-filter category-filter-dropdown" data-total-cats="${categories.length}">`;
+  html += '<div class="dropdown-toggle" role="button" aria-haspopup="listbox" aria-expanded="false">';
+  html += `<strong>Filtrer par catégorie</strong> <span class="drop-count">(${selectedSet.size}/${categories.length})</span>`;
+  html += '</div>';
+  html += '<div class="dropdown-panel" role="listbox">';
+  html += '<input class="cat-search" placeholder="Rechercher..." aria-label="Rechercher catégories">';
+  html += '<div class="cat-actions"><button type="button" id="cat-select-all">Tous</button><button type="button" id="cat-clear">Aucun</button></div>';
+  html += '<div class="cat-items">';
+  categories.forEach(c => {
+    const checked = selectedSet.has(c) ? 'checked' : '';
+    html += `<label class="cat-item"><input type="checkbox" value="${escapeHtml(c)}" ${checked}> <span class="cat-name">${escapeHtml(c)}</span></label>`;
+  });
+  html += '</div>'; // .cat-items
+  html += '</div>'; // .dropdown-panel
+  html += '</div>'; // .category-filter-dropdown
+  html += '</div>'; // .pivot-actions
+
+  // --- جدول النتائج (نُبقي فقط العمود Total) ---
+  html += '<div class="pivot-table-wrap"><table class="pivot-table">';
+
+  // رؤوس الجدول (فرنسية)
+  html += '<thead>';
+  html += '<tr>';
+  html += '<th>Région</th>';
+  html += '<th>Province</th>';
+  html += '<th>Commune</th>';
+  html += '<th>Total</th>';
+  html += '</tr>';
+  html += '</thead>';
+
+  html += '<tbody>';
+
+  // صفوف: جهة > إقليم > جماعة
+  let grandTotal = 0; // إجمالي عام لجميع الصفوف الظاهرة
+  Array.from(agg.keys()).sort().forEach(region => {
+    const provMap = agg.get(region);
+    let regionFirst = true;
+
+    Array.from(provMap.keys()).sort().forEach(prov => {
+      const commMap = provMap.get(prov);
+      let provFirst = true;
+
+      Array.from(commMap.keys()).sort().forEach(comm => {
+        const cell = commMap.get(comm);
+        // حساب الـ total الاعتماداً على التصنيفات المحددة
+        let totalToShow = 0;
+        if(selectedSet.size === categories.length){
+          totalToShow = cell.total;
+        } else {
+          selectedSet.forEach(cat => { totalToShow += (cell.byCategory.get(cat) || 0); });
+        }
+
+        // إذا لم نُرِد إخفاء صفوف الصفر، نظهر كل الصفوف وإلا نتخطّى صفرية القيم
+        if (!showZeroRows && totalToShow === 0) {
+          return; // يتخطى هذه الجماعة
+        }
+
+        // نضيف صف الجدول ونراعي rowSpan
+        html += '<tr>';
+        if(regionFirst){ html += `<td rowspan="${regionRows.get(region)}">${escapeHtml(region)}</td>`; regionFirst = false; }
+        if(provFirst){ html += `<td rowspan="${provRows.get(region + '||' + prov)}">${escapeHtml(prov)}</td>`; provFirst = false; }
+        html += `<td class="comm">${escapeHtml(comm)}</td>`;
+        html += `<td class="num">${totalToShow}</td>`;
+        html += '</tr>';
+
+        grandTotal += totalToShow;
+      });
+    });
+  });
+
+  html += '</tbody>';
+
+  // صف الملخّص (Somme)
+  html += `<tfoot><tr><td colspan="3"><strong>Somme</strong></td><td class="num"><strong>${grandTotal}</strong></td></tr></tfoot>`;
+  html += '</table></div>';
+
+  container.innerHTML = html;
+
+  // ربط أحداث فلترة التصنيفات باستخدام dropdown checkboxes
+  const dropdown = container.querySelector('.category-filter-dropdown');
+  if(dropdown){
+    const toggle = dropdown.querySelector('.dropdown-toggle');
+    const panel = dropdown.querySelector('.dropdown-panel');
+    const search = dropdown.querySelector('.cat-search');
+    const items = Array.from(dropdown.querySelectorAll('.cat-item input[type=checkbox]'));
+    const countEl = dropdown.querySelector('.drop-count');
+
+    function updateCount(){
+      const selCount = items.filter(i => i.checked).length;
+      if(countEl) countEl.textContent = `(${selCount}/${categories.length})`;
+    }
+    updateCount();
+
+    toggle.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      panel.classList.toggle('open');
+      toggle.setAttribute('aria-expanded', panel.classList.contains('open') ? 'true' : 'false');
+    });
+
+    // إغلاق اللوحة عند النقر خارجها (مُقيّد داخل container لتجنّب تسجيل مستمعات عدة على document)
+    if(!container._catDropdownCloseHandlerAdded){
+      container._catDropdownCloseHandlerAdded = true;
+      container.addEventListener('click', (e) => {
+        const openPanels = container.querySelectorAll('.dropdown-panel.open');
+        openPanels.forEach(p => {
+          const parent = p.closest('.category-filter-dropdown');
+          if(!parent.contains(e.target)){
+            p.classList.remove('open');
+            const t = parent.querySelector('.dropdown-toggle'); if(t) t.setAttribute('aria-expanded', 'false');
+          }
+        });
+      });
+    }
+
+    items.forEach(cb => cb.addEventListener('change', () => {
+      updateCount();
+      const vals = items.filter(i => i.checked).map(i => i.value);
+      renderPivotTable(agg, categories, reseaux, new Set(vals));
+    }));
+
+    if(search){
+      search.addEventListener('input', () => {
+        const q = search.value.trim().toLowerCase();
+        dropdown.querySelectorAll('.cat-item').forEach(el => {
+          const txt = el.querySelector('.cat-name').textContent.toLowerCase();
+          el.style.display = txt.indexOf(q) !== -1 ? '' : 'none';
+        });
+      });
+    }
+
+    const btnAll = dropdown.querySelector('#cat-select-all');
+    const btnClear = dropdown.querySelector('#cat-clear');
+    if(btnAll) btnAll.addEventListener('click', () => { items.forEach(i => i.checked = true); updateCount(); renderPivotTable(agg, categories, reseaux, new Set(categories)); });
+    if(btnClear) btnClear.addEventListener('click', () => { items.forEach(i => i.checked = false); updateCount(); renderPivotTable(agg, categories, reseaux, new Set()); });
+  }
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"})[c]);
+}
+
+let lastPivotData = null;
+
+function createPivot(list){
+  const { agg, categories, reseaux } = buildPivotData(list);
+  // احفظ البيانات لتمكين التصدير لاحقاً
+  lastPivotData = { agg, categories, reseaux };
+  renderPivotTable(agg, categories, reseaux);
+}
+
+// جمع الصفوف للتصدير (Région, Province, Commune, Total) حسب الفلتر الحالي
+function buildExportRows(){
+  if(!lastPivotData) return [];
+  const { agg, categories } = lastPivotData;
+  // جلب التصنيفات المحددة من الـ dropdown (إذا لم توجد اختيارات => كل التصنيفات)
+  const container = document.getElementById('pivotContent');
+  const dropdown = container && container.querySelector('.category-filter-dropdown');
+  let selectedSet = new Set(categories);
+  if(dropdown){
+    const items = Array.from(dropdown.querySelectorAll('.cat-item input[type=checkbox]'));
+    const checked = items.filter(i=>i.checked).map(i=>i.value);
+    // إذا تم إلغاء الكل، تصبح المجموعة فارغة (يعكس سلوك الواجهة)
+    if(items.length > 0) selectedSet = new Set(checked);
+  }
+
+  const rows = [];
+  agg.forEach((provMap, region) => {
+    provMap.forEach((commMap, province) => {
+      commMap.forEach((cell, commune) => {
+        let totalToShow = 0;
+        if(selectedSet.size === categories.length) totalToShow = cell.total;
+        else selectedSet.forEach(cat => { totalToShow += (cell.byCategory.get(cat) || 0); });
+        rows.push({ 'Région': region, 'Province': province, 'Commune': commune, 'Total': totalToShow });
+      });
+    });
+  });
+  return rows;
+}
+
+function exportPivotToXLSX(){
+  if(typeof XLSX === 'undefined'){
+    alert('La bibliothèque XLSX n\'est pas chargée.');
+    return;
+  }
+  const rows = buildExportRows();
+  if(!rows || rows.length === 0){
+    alert('Aucune donnée à exporter');
+    return;
+  }
+  // أضف صف المجموع في نهاية التصدير
+  const totalSum = rows.reduce((s,r) => s + (Number(r.Total) || 0), 0);
+  rows.push({ 'Région': '', 'Province': '', 'Commune': 'Somme', 'Total': totalSum });
+
+  const ws = XLSX.utils.json_to_sheet(rows, {header:['Région','Province','Commune','Total']});
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Pivot');
+  const now = new Date();
+  const fname = `pivot_export_${now.toISOString().slice(0,19).replace(/[:T]/g,'_')}.xlsx`;
+  XLSX.writeFile(wb, fname);
+}
+
+// زر التصدير
+const exportBtn = document.getElementById('exportExcelBtn');
+if(exportBtn){ exportBtn.addEventListener('click', exportPivotToXLSX); }
+
+// زر تبديل إظهار/إخفاء صفوف الصفر
+const toggleZerosBtn = document.getElementById('toggleZerosBtn');
+if(toggleZerosBtn){
+  function updateToggleZerosUI(){
+    toggleZerosBtn.classList.toggle('active', showZeroRows);
+    toggleZerosBtn.textContent = showZeroRows ? 'إخفاء زيرو' : 'Afficher zéros';
+  }
+  toggleZerosBtn.addEventListener('click', () => {
+    showZeroRows = !showZeroRows;
+    updateToggleZerosUI();
+    // إعادة بناء الجدول مع الحالة المحدثة
+    if(lastPivotData) renderPivotTable(lastPivotData.agg, lastPivotData.categories, lastPivotData.reseaux);
+  });
+  updateToggleZerosUI();
+}
+
+// زر إظهار/إخفاء اللوحة + تعديل تخطيط 50/50
+const toggleBtn = document.getElementById('togglePivotBtn');
+const closeBtn = document.getElementById('closePivot');
+if(toggleBtn){
+  toggleBtn.addEventListener('click', () => {
+    const container = document.getElementById('app-container');
+    const showing = container.classList.contains('with-pivot');
+    container.classList.toggle('with-pivot', !showing);
+    container.classList.toggle('map-only', showing);
+    document.getElementById('pivotPanel').setAttribute('aria-hidden', showing);
+    toggleBtn.textContent = showing ? 'عرض الجدول' : 'إخفاء الجدول';
+    setTimeout(() => map.invalidateSize(), 300);
+  });
+}
+if(closeBtn){ closeBtn.addEventListener('click', () => toggleBtn && toggleBtn.click()); }
+
