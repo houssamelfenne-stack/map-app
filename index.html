@@ -5,16 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#1f77b4" />
     <meta name="description" content="منصة خريطة تفاعلية لعرض وتحليل المؤسسات الصحية" />
+    <!-- Preferred basemap: public OSM tiles, no API key required -->
+    <meta name="preferred-basemap" content="osm" />
     <title>منصة الخريطة التفاعلية للصحة العمومية — تحليل المؤسسات</title>
 
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
     <!-- Font Awesome for icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;600;700&display=swap" />
-    <link rel="stylesheet" href="style.css?v=20260310-chatbot-3" />
+    <link rel="stylesheet" href="style.css?v=20260301-next-2" />
   </head>
   <body class="landing-open">
 
@@ -165,10 +166,7 @@
         </button>
         <button id="themeToggleBtn" class="header-btn" title="تفعيل الوضع الداكن" aria-label="تبديل الوضع الداكن">
           <i id="themeToggleIcon" class="fas fa-moon"></i>
-        </button>
-        <button id="chatbotToggleBtn" class="header-btn chatbot-toggle-btn" type="button" aria-label="مساعد البيانات الصحية" title="مساعد البيانات الصحية">
-          <i class="fas fa-comments"></i>
-          <span id="chatbotToggleLabel">مساعد الصحة</span>
+          <span id="themeToggleLabel">داكن</span>
         </button>
         <button id="helpBtn" class="header-btn" title="المساعدة والاختصارات" aria-label="المساعدة">
           <i class="fas fa-question-circle"></i>
@@ -178,6 +176,9 @@
         </button>
         <button id="captureMapBtn" class="header-btn" title="حفظ صورة الخريطة PNG" aria-label="حفظ صورة الخريطة">
           <i class="fas fa-camera"></i>
+        </button>
+        <button id="shareBtn" class="header-btn" title="مشاركة الخريطة" aria-label="مشاركة">
+          <i class="fas fa-share-nodes"></i>
         </button>
       </div>
     </header>
@@ -207,25 +208,6 @@
         <button id="togglePivotPopulationBtn" class="toggle-pivot" title="إحصائيات سكان RGPH 2024"><i class="fas fa-people-group"></i> <span id="togglePivotPopulationBtnText">إحصائيات سكان RGPH 2024</span></button>
       </div>
     </div>
-
-    <section id="chatbotPanel" class="chatbot-panel" aria-label="مساعد البيانات" aria-hidden="true">
-      <div class="chatbot-header">
-        <div class="chatbot-title-wrap">
-          <strong id="chatbotTitle">مساعد البيانات الصحية</strong>
-          <span id="chatbotCloudBadge" class="chatbot-cloud-badge">Cloud: -- | Azure: --</span>
-        </div>
-        <div class="chatbot-header-actions">
-          <button id="chatbotExportBtn" class="chatbot-export-btn" type="button" aria-label="تصدير المحادثة">CSV</button>
-          <button id="chatbotExpertModeBtn" class="chatbot-expert-btn" type="button" aria-label="تفعيل الوضع الخبير">Expert: OFF</button>
-          <button id="chatbotCloseBtn" class="chatbot-close-btn" type="button" aria-label="إغلاق">✕</button>
-        </div>
-      </div>
-      <div id="chatbotMessages" class="chatbot-messages" role="log" aria-live="polite"></div>
-      <div class="chatbot-input-wrap">
-        <input id="chatbotInput" class="chatbot-input" type="text" placeholder="اسأل عن السكان، العرض الصحي أو برامج OMS..." />
-        <button id="chatbotSendBtn" class="chatbot-send-btn" type="button">إرسال</button>
-      </div>
-    </section>
 
     <!-- Help Modal -->
     <div id="helpModal" class="modal" style="display:none;">
@@ -259,21 +241,12 @@
     <!-- Leaflet + MarkerCluster -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-    <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
-    <script src="https://unpkg.com/leaflet-polylinedecorator@1.7.0/dist/leaflet.polylineDecorator.min.js"></script>
     <!-- SheetJS for .xlsx export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <!-- DOMPurify for security -->
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
     <!-- html2canvas for map PNG export -->
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-    <script src="app.js?v=20260310-chatbot-8"></script>
-
-    <footer class="app-footer" aria-label="حقوق النشر">
-      <span>&copy; <span id="copyrightYear"></span> Houssam El Fenne. جميع الحقوق محفوظة.</span>
-    </footer>
-    <script>
-      document.getElementById('copyrightYear').textContent = new Date().getFullYear();
-    </script>
+    <script src="app.js?v=20260918-no-api-key-3"></script>
   </body>
 </html>
