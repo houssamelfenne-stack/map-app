@@ -5,8 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#1f77b4" />
     <meta name="description" content="منصة خريطة تفاعلية لعرض وتحليل المؤسسات الصحية" />
-    <!-- Preferred basemap: public OSM tiles, no API key required -->
-    <meta name="preferred-basemap" content="osm" />
     <title>منصة الخريطة التفاعلية للصحة العمومية — تحليل المؤسسات</title>
 
     <!-- Leaflet CSS -->
@@ -241,12 +239,16 @@
     <!-- Leaflet + MarkerCluster -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script src="https://unpkg.com/leaflet-polylinedecorator@1.7.0/dist/leaflet.polylineDecorator.min.js"></script>
     <!-- SheetJS for .xlsx export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <!-- DOMPurify for security -->
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
     <!-- html2canvas for map PNG export -->
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-    <script src="app.js?v=20260918-no-api-key-3"></script>
+    <script>
+      window.CARTO_API_KEY = 'cb1_3q49_1_6bdaa3af80a6d8a9df251f2b';
+    </script>
+    <script src="app.js?v=20260301-rgph2024-1"></script>
   </body>
 </html>

@@ -837,11 +837,6 @@ body.lang-fr #app-container.with-pivot #pivotPanel {
   flex: 1;
   min-width: 0;
   height: 100%;
-  background: #0b1f2a;
-}
-
-body[data-theme="dark"] #map {
-  background: linear-gradient(180deg, #0d2b3a, #081b26);
 }
 
 .route-info-panel {
@@ -2006,12 +2001,6 @@ body,
   transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
-body[data-theme="dark"] .pivot-quick-actions {
-  right: 14px;
-  bottom: 20px;
-  z-index: 750;
-}
-
 body[data-theme="dark"] {
   --panel-bg: rgba(15, 23, 42, 0.92);
   --accent: #60a5fa;
@@ -2029,22 +2018,6 @@ body[data-theme="dark"] {
 body[data-theme="dark"] .app-header {
   background: linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.96));
   border-bottom-color: #3b82f6;
-  position: sticky;
-  top: 0;
-  left: 0;
-  right: 0;
-  width: 100%;
-  z-index: 1000;
-  padding: 10px 18px;
-  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.35);
-}
-
-body[data-theme="dark"] .header-left {
-  display: flex;
-}
-
-body[data-theme="dark"] .header-stats {
-  display: flex;
 }
 
 body[data-theme="dark"] #appTitleText {
@@ -2069,55 +2042,6 @@ body[data-theme="dark"] .landing-stat,
 body[data-theme="dark"] .landing-card {
   background-color: rgba(15, 23, 42, 0.92);
   border-color: #334155;
-}
-
-body[data-theme="dark"] .header-actions {
-  position: static;
-  flex-direction: row;
-  gap: 8px;
-  margin-inline-start: auto;
-}
-
-body[data-theme="dark"] .header-btn {
-  width: auto;
-  height: auto;
-  padding: 8px 12px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  background: rgba(23, 28, 38, 0.88);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  color: #f5f7ff;
-  box-shadow: 0 8px 18px rgba(2, 6, 23, 0.35);
-}
-
-body[data-theme="dark"] .header-btn:nth-child(1),
-body[data-theme="dark"] .header-btn:nth-child(3),
-body[data-theme="dark"] .header-btn:nth-child(5),
-body[data-theme="dark"] .header-btn:nth-child(6) {
-  background: rgba(15, 23, 42, 0.92);
-  border-color: rgba(148, 163, 184, 0.35);
-  color: #f8fafc;
-}
-
-body[data-theme="dark"] .header-btn:hover,
-body[data-theme="dark"] .toggle-pivot:hover,
-body[data-theme="dark"] .toggle-stats:hover,
-body[data-theme="dark"] .toggle-legend:hover,
-body[data-theme="dark"] .export-btn:hover {
-  background: rgba(30, 41, 59, 0.98);
-  border-color: rgba(96, 165, 250, 0.7);
-  color: #e2e8f0;
-}
-
-body[data-theme="dark"] .header-btn.active,
-body[data-theme="dark"] .toggle-pivot.active,
-body[data-theme="dark"] .toggle-stats.active,
-body[data-theme="dark"] .toggle-zeros-btn.active {
-  background: rgba(30, 41, 59, 0.98);
-  border-color: rgba(96, 165, 250, 0.7);
-  color: #e2e8f0;
 }
 
 body[data-theme="dark"] .main-landing {
@@ -2271,11 +2195,6 @@ body[data-theme="dark"] .area-label-commune {
 
 body[data-theme="dark"] .leaflet-container {
   background: #111827;
-}
-
-body[data-theme="dark"] .leaflet-tile-pane {
-  filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7);
-  -webkit-filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7);
 }
 
 body[data-theme="dark"] .leaflet-tile {

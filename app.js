@@ -4,7 +4,10 @@ const CONFIG = {
   MAP_ZOOM: 6,
   MAX_RESULTS: 50,
   DEBOUNCE_DELAY: 300,
-  TOAST_DURATION: 3000
+  TOAST_DURATION: 3000,
+  CARTO_API_KEY: (typeof window !== 'undefined' && window.CARTO_API_KEY)
+    ? window.CARTO_API_KEY
+    : 'cb1_3q49_1_6bdaa3af80a6d8a9df251f2b'
 };
 
 const COLORS = {
@@ -2816,66 +2819,25 @@ function applyGeographicFilters({ region, province, commune, fitBounds = true } 
 }
 
 function getBaseMapTileUrl() {
-  const preferred = getPreferredBasemap();
+  const apiKey = (CONFIG.CARTO_API_KEY || '').trim();
 
-  if (preferred === 'relief') {
-    return 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png';
-  }
+  const lightUrl = 'https://{s}.basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}.png';
+  const darkUrl = 'https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png';
+  const baseUrl = isDarkTheme() ? darkUrl : lightUrl;
 
-  if (preferred === 'carto') {
-    return 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-  }
+  if (!apiKey) return baseUrl;
 
-  // Use a genuine free public basemap for both day and night modes.
-  return 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+  return `${baseUrl}?key=${encodeURIComponent(apiKey)}`;
 }
 
 function createBaseMapTileLayer(url) {
-  const options = {
+  return L.tileLayer(url, {
     maxZoom: 19,
+    subdomains: 'abcd',
     crossOrigin: 'anonymous',
-    referrerPolicy: 'no-referrer'
-  };
-
-  // Choose subdomains depending on the tile URL
-  if (url.includes('{s}')) {
-    options.subdomains = url.includes('openstreetmap.org') ? 'abc' : 'abcd';
-  }
-
-  // Attribution tuned to provider
-  if (url.includes('cartocdn.com')) {
-    options.attribution = '© OpenStreetMap © CARTO';
-  } else if (url.includes('stadiamaps.com')) {
-    options.attribution = 'Map tiles by Stadia Maps, © OpenMapTiles © OpenStreetMap contributors';
-  } else if (url.includes('opentopomap.org')) {
-    options.attribution = 'Map data: © OpenStreetMap contributors, SRTM | Map style: © OpenTopoMap (CC-BY-SA)';
-  } else {
-    options.attribution = '&copy; OpenStreetMap contributors';
-  }
-
-  const layer = L.tileLayer(url, options);
-
-  // Keep silent fallback for public tiles; no authentication prompt is required.
-  window.__cartoFallbackNotified = true;
-
-  return layer;
-}
-
-// Force no-key public tiles so the map never requests an auth-required URL.
-function getCartoApiKey() {
-  return '';
-}
-
-// Read preferred basemap from meta[name="preferred-basemap"] or window.PREFERRED_BASEMAP
-function getPreferredBasemap() {
-  try {
-    if (typeof document !== 'undefined') {
-      const meta = document.querySelector('meta[name="preferred-basemap"]');
-      if (meta && meta.content) return normalizeTextValue(meta.content).toLowerCase();
-    }
-  } catch (e) {}
-  if (typeof window !== 'undefined' && window.PREFERRED_BASEMAP) return normalizeTextValue(window.PREFERRED_BASEMAP).toLowerCase();
-  return '';
+    referrerPolicy: 'no-referrer',
+    attribution: ''
+  });
 }
 
 function applyBaseMapTheme() {
@@ -2897,7 +2859,7 @@ function applyBaseMapTheme() {
 
 /* ============ MAP INITIALIZATION ============ */
 function initMap() {
-  map = L.map('map').setView(CONFIG.MAP_CENTER, CONFIG.MAP_ZOOM);
+  map = L.map('map', { attributionControl: false }).setView(CONFIG.MAP_CENTER, CONFIG.MAP_ZOOM);
   applyBaseMapTheme();
 
   // Create layers once
