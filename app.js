@@ -495,6 +495,7 @@ function ensureLayerVisibilityState() {
       RawInstitutions: false,
       ProvinceLabels: true,
       CommuneLabels: true,
+      IndicatorValues: true,
       Networks: true
     };
   }
@@ -2700,6 +2701,7 @@ function updateProvinceLayerByFilters(shouldFitBounds = true) {
     });
 
     updateProvinceLabelVisibility(layer, matches);
+    refreshAreaValueLabel(layer, 'province', matches);
 
     if (matches && layer.getBounds) {
       selectedBounds.extend(layer.getBounds());
@@ -2716,7 +2718,8 @@ function updateCommuneLayerByFilters() {
   const layerVisibility = ensureLayerVisibilityState();
   const communesVisible = layerVisibility.Communes;
   const communeLabelsVisible = layerVisibility.CommuneLabels;
-  const communeLabelsZoomReady = (map?.getZoom?.() || 0) >= COMMUNE_LABEL_MIN_ZOOM;
+  const zoom = map?.getZoom?.() || 0;
+  const communeLabelsZoomReady = zoom >= COMMUNE_LABEL_MIN_ZOOM;
   const selectedProvinceCodes = currentProvinceFilter ? getProvinceCodesForFilter(currentProvinceFilter) : new Set();
   const activeTheme = getActiveExcelTheme();
   const applyCommuneTheme = !!(activeTheme && getExcelColoringTargetLevel() === 'commune');
@@ -2769,8 +2772,10 @@ function updateCommuneLayerByFilters() {
 
     if (layer._labelMarker?.getElement) {
       const el = layer._labelMarker.getElement();
-      if (el) el.style.display = communesVisible && communeLabelsVisible && communeLabelsZoomReady && matches ? '' : 'none';
+      const showCommuneLabel = communesVisible && communeLabelsVisible && communeLabelsZoomReady && matches;
+      if (el) el.style.display = showCommuneLabel ? '' : 'none';
     }
+    refreshAreaValueLabel(layer, 'commune', matches);
   });
 
   resolveProvinceLabelObstacles();
@@ -2993,10 +2998,12 @@ function applyReseauFilter() {
 
 function buildAreaLabelHtml(text, type = 'commune', options = {}) {
   const typeClass = type === 'province' ? 'area-label-province' : 'area-label-commune';
+  const extraClass = options.className ? ` ${options.className}` : '';
   const inlineStyle = Object.entries(options)
+    .filter(([key]) => key !== 'className')
     .map(([key, value]) => `${key}:${value}`)
     .join(';');
-  return `<div class="area-label ${typeClass}" style="${inlineStyle}">${escapeHtml(text)}</div>`;
+  return `<div class="area-label ${typeClass}${extraClass}" style="${inlineStyle}">${escapeHtml(text)}</div>`;
 }
 
 function getAreaLabelRenderOptions(bounds, type = 'commune', options = {}) {
@@ -3102,6 +3109,53 @@ function createInstitutionMarker(item, color, reseau, reseauArabic) {
   return marker;
 }
 
+function getFeatureValueLabelText(level, props = {}) {
+  const activeTheme = getActiveExcelTheme();
+  const targetLevel = normalizeExcelColoringTargetLevel(level);
+  if (!(activeTheme && targetLevel === getExcelColoringTargetLevel())) return '';
+
+  const selectedFieldKey = excelSelectedValueFieldByLevel[targetLevel] || 'value';
+  const valueResult = getThemeValueForFeatureField(activeTheme, targetLevel, selectedFieldKey, props);
+  const value = valueResult?.value;
+  if (typeof value === 'undefined' || value === null || value === '') return '';
+
+  const fieldLabel = getExcelSelectedValueFieldLabel(targetLevel);
+  return formatFieldValueForDisplay(value, fieldLabel);
+}
+
+function refreshAreaValueLabel(layer, level, matches = true) {
+  if (!layer?._valueLabelMarker) return;
+  const props = layer.feature?.properties || {};
+  const text = getFeatureValueLabelText(level, props);
+  const marker = layer._valueLabelMarker;
+  const bounds = layer.getBounds?.();
+  const center = bounds?.getCenter?.() || marker.getLatLng?.() || map?.getCenter?.();
+
+  if (!center) return;
+  const options = getAreaLabelRenderOptions(bounds, level, {
+    className: level === 'province' ? 'province-value-label-inner' : 'commune-value-label-inner'
+  });
+  const iconClassName = level === 'province' ? 'province-value-label' : 'commune-value-label';
+  marker.setLatLng(center);
+  marker.setIcon(L.divIcon({
+    className: iconClassName,
+    html: buildAreaLabelHtml(text || '—', level, options),
+    iconSize: null,
+    iconAnchor: level === 'province' ? [34, 18] : [28, 12]
+  }));
+
+  const el = marker.getElement();
+  if (!el) return;
+  const layerVisibility = ensureLayerVisibilityState();
+  const valueVisible = layerVisibility.IndicatorValues;
+  const zoom = map?.getZoom?.() || 0;
+  const validZoom = level === 'province'
+    ? zoom >= PROVINCE_LABEL_MIN_ZOOM
+    : zoom >= COMMUNE_LABEL_MIN_ZOOM;
+  const canShow = !!text && valueVisible && matches && validZoom;
+  el.style.display = canShow ? '' : 'none';
+}
+
 function updateProvinceLabelVisibility(layer, matches) {
   if (!layer?._labelMarker?.getElement) return;
   const el = layer._labelMarker.getElement();
@@ -3112,11 +3166,18 @@ function updateProvinceLabelVisibility(layer, matches) {
   const communesVisible = layerVisibility.Communes;
   const labelsVisible = layerVisibility.ProvinceLabels;
   const zoom = map?.getZoom?.() || 0;
-  const showProvinceLabelsByZoom = zoom >= PROVINCE_LABEL_MIN_ZOOM
-    && (zoom < COMMUNE_LABEL_MIN_ZOOM || !communesVisible);
+  const showProvinceLabelsByZoom = zoom >= PROVINCE_LABEL_MIN_ZOOM;
   const canShow = provincesVisible && labelsVisible && matches && showProvinceLabelsByZoom;
   el.dataset.baseVisible = canShow ? '1' : '0';
   el.style.display = canShow ? '' : 'none';
+
+  if (layer._valueLabelMarker?.getElement) {
+    const valueEl = layer._valueLabelMarker.getElement();
+    if (valueEl) {
+      const valueText = getFeatureValueLabelText('province', layer.feature?.properties || {});
+      valueEl.style.display = (provincesVisible && matches && showProvinceLabelsByZoom && valueText) ? '' : 'none';
+    }
+  }
 }
 
 function isVisibleHtmlElement(element) {
@@ -3288,7 +3349,7 @@ function createProvinceLayer() {
       const props = f?.properties || {};
       bindSmartAreaPopup(l, buildProvincePopup(props));
 
-      if (f.geometry) {
+          if (f.geometry) {
         const bounds = L.geoJSON(f).getBounds();
         const center = bounds.getCenter();
         const provinceName = toArabicProvinceName(getLayerProvinceName(props));
@@ -3304,6 +3365,20 @@ function createProvinceLayer() {
         labelMarker.addTo(map);
         l._labelMarker = labelMarker;
         l._labelBaseLatLng = center;
+
+        const valueLabelMarker = L.marker(center, {
+          icon: L.divIcon({
+            className: 'province-value-label',
+            html: buildAreaLabelHtml('', 'province', {
+              ...labelOptions,
+              className: 'province-value-label-inner'
+            }),
+            iconSize: null,
+            iconAnchor: [34, 16]
+          })
+        });
+        valueLabelMarker.addTo(map);
+        l._valueLabelMarker = valueLabelMarker;
       }
     }
   }).addTo(map);
@@ -3336,6 +3411,20 @@ function createCommuneLayer() {
         });
         labelMarker.addTo(map);
         l._labelMarker = labelMarker;
+
+        const valueLabelMarker = L.marker(center, {
+          icon: L.divIcon({
+            className: 'commune-value-label',
+            html: buildAreaLabelHtml('', 'commune', {
+              ...labelOptions,
+              className: 'commune-value-label-inner'
+            }),
+            iconSize: null,
+            iconAnchor: [32, 10]
+          })
+        });
+        valueLabelMarker.addTo(map);
+        l._valueLabelMarker = valueLabelMarker;
       }
     }
   }).addTo(map);
@@ -3675,6 +3764,7 @@ function updateLegend() {
     { id: 'Communes', name: langText('الجماعات', 'Communes'), icon: 'fas fa-square', color: '#666' },
     { id: 'ProvinceLabels', name: langText('أسماء الأقاليم داخل المجال', 'Noms des provinces dans la carte'), icon: 'fas fa-font', color: '#334155' },
     { id: 'CommuneLabels', name: langText('أسماء الجماعات داخل المجال', 'Noms des communes dans la carte'), icon: 'fas fa-font', color: '#64748b' },
+    { id: 'IndicatorValues', name: langText('قيمة المؤشر على الخريطة', 'Valeur de l’indicateur sur la carte'), icon: 'fas fa-hashtag', color: '#7c3aed' },
     { id: 'Clustered', name: langText('المؤسسات المجمعة', 'Établissements groupés'), icon: 'fas fa-circle', color: '#1f77b4' },
     { id: 'RawInstitutions', name: langText('المؤسسات كما هي على الخريطة', 'Établissements bruts sur la carte'), icon: 'fas fa-location-dot', color: '#0f766e' }
   ];
@@ -4018,6 +4108,9 @@ function toggleLayer(layerId, visible) {
   } else if (layerId === 'ProvinceLabels') {
     updateProvinceLayerByFilters(false);
   } else if (layerId === 'CommuneLabels') {
+    updateCommuneLayerByFilters();
+  } else if (layerId === 'IndicatorValues') {
+    updateProvinceLayerByFilters(false);
     updateCommuneLayerByFilters();
   } else if (layerId === 'Clustered' && markersClusterGroup) {
     if (visible) {
@@ -5683,6 +5776,154 @@ function printTable() {
   printWindow.document.close();
 }
 
+function drawRoundedRect(ctx, x, y, w, h, r = 12) {
+  const radius = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + w - radius, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+  ctx.lineTo(x + w, y + h - radius);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+  ctx.lineTo(x + radius, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+}
+
+function getExportMapFilterSummary() {
+  const parts = [];
+  if (currentRegionFilter) {
+    parts.push(`${langText('الجهة', 'Région')} : ${toArabicRegionName(currentRegionFilter)}`);
+  }
+  if (currentProvinceFilter) {
+    parts.push(`${langText('الإقليم', 'Province')} : ${toArabicProvinceName(currentProvinceFilter)}`);
+  }
+  if (currentCommuneFilter) {
+    parts.push(`${langText('الجماعة', 'Commune')} : ${toArabicCommuneName(currentCommuneFilter)}`);
+  }
+  if (!parts.length) {
+    return langText('خريطة المغرب', 'Carte du Maroc');
+  }
+  return parts.join(' • ');
+}
+
+function getExportLegendValues() {
+  const targetLevel = getExcelColoringTargetLevel();
+  const activeTheme = getActiveExcelTheme();
+  if (!activeTheme) return null;
+
+  const symbology = getUiSymbologyForLevel(targetLevel);
+  const values = Array.from(activeTheme.values?.[targetLevel]?.values?.() || [])
+    .map((value) => parseNumericValue(value))
+    .filter((value) => Number.isFinite(value));
+
+  if (!values.length) return null;
+
+  const minValue = Number.isFinite(parseNumericValue(symbology.minValue)) ? parseNumericValue(symbology.minValue) : Math.min(...values);
+  const maxValue = Number.isFinite(parseNumericValue(symbology.maxValue)) ? parseNumericValue(symbology.maxValue) : Math.max(...values);
+  const midValue = Number.isFinite(parseNumericValue(symbology.midValue)) ? parseNumericValue(symbology.midValue) : (minValue + maxValue) / 2;
+
+  return {
+    min: minValue,
+    mid: midValue,
+    max: maxValue,
+    fieldLabel: getExcelSelectedValueFieldLabel(targetLevel),
+    minColor: normalizeHexColor(symbology.minColor, targetLevel === 'province' ? '#dbeafe' : '#dcfce7'),
+    midColor: normalizeHexColor(symbology.midColor, targetLevel === 'province' ? '#60a5fa' : '#4ade80'),
+    maxColor: normalizeHexColor(symbology.maxColor, targetLevel === 'province' ? '#1d4ed8' : '#15803d')
+  };
+}
+
+function drawMapExportOverlay(ctx, mapW, mapH, mapRef) {
+  const legendData = getExportLegendValues();
+  const isDark = isDarkTheme();
+  const margin = 18;
+  const panelW = Math.min(440, Math.max(300, mapW * 0.42));
+  const panelH = legendData ? 170 : 120;
+  const panelX = Math.max(12, mapW - panelW - margin);
+  const panelY = Math.max(12, mapH - panelH - margin);
+
+  ctx.save();
+  ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.92)' : 'rgba(255,255,255,0.9)';
+  drawRoundedRect(ctx, panelX, panelY, panelW, panelH, 14);
+  ctx.fill();
+  ctx.strokeStyle = isDark ? 'rgba(148,163,184,0.35)' : 'rgba(15,23,42,0.12)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  const title = legendData?.fieldLabel
+    ? `${langText('المفتاح', 'Légende')} : ${legendData.fieldLabel}`
+    : langText('المفتاح', 'Légende');
+  ctx.fillStyle = isDark ? '#e2e8f0' : '#0f172a';
+  ctx.font = '700 15px Arial';
+  ctx.textAlign = 'left';
+  ctx.direction = 'rtl';
+  ctx.fillText(title, panelX + 16, panelY + 24);
+
+  const filterText = getExportMapFilterSummary();
+  ctx.font = '600 10px Arial';
+  ctx.fillStyle = isDark ? '#cbd5e1' : '#334155';
+  ctx.textAlign = 'left';
+  ctx.fillText(filterText, panelX + 16, panelY + 42, panelW - 32);
+
+  const bounds = mapRef.getBounds();
+  const centerLat = (bounds.getNorth() + bounds.getSouth()) / 2;
+  const widthKm = mapRef.distance([centerLat, bounds.getWest()], [centerLat, bounds.getEast()]) / 1000;
+  const physicalCm = (mapW / 96) * 2.54;
+  const kmPerCm = physicalCm > 0 ? (widthKm / physicalCm) : 0;
+  const scaleText = `1 cm = ${Number.isFinite(kmPerCm) && kmPerCm > 0 ? kmPerCm.toFixed(1) : '—'} km`;
+  const scaleLabel = langText('المقياس', 'Échelle');
+  ctx.fillStyle = isDark ? '#94a3b8' : '#475569';
+  ctx.font = '600 10px Arial';
+  ctx.fillText(scaleLabel, panelX + 16, panelY + 62);
+  ctx.fillStyle = isDark ? '#f8fafc' : '#0f172a';
+  ctx.fillText(scaleText, panelX + 16, panelY + 78);
+
+  if (legendData) {
+    const fieldLabel = legendData.fieldLabel || langText('قيمة المؤشر', 'Valeur de l’indicateur');
+    const gX = panelX + 16;
+    const gY = panelY + 92;
+    const gW = panelW - 32;
+    const barHeight = 12;
+    const gradient = ctx.createLinearGradient(gX, gY, gX + gW, gY);
+    gradient.addColorStop(0, legendData.minColor);
+    gradient.addColorStop(0.5, legendData.midColor);
+    gradient.addColorStop(1, legendData.maxColor);
+    ctx.fillStyle = gradient;
+    drawRoundedRect(ctx, gX, gY, gW, barHeight, 5);
+    ctx.fill();
+
+    const valueStyle = { min: legendData.min, mid: legendData.mid, max: legendData.max };
+    const labels = [
+      formatFieldValueForDisplay(valueStyle.min, fieldLabel),
+      formatFieldValueForDisplay(valueStyle.mid, fieldLabel),
+      formatFieldValueForDisplay(valueStyle.max, fieldLabel)
+    ];
+
+    const labelY = gY + 24;
+    ctx.fillStyle = isDark ? '#e2e8f0' : '#334155';
+    ctx.font = '700 9px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText(labels[0], gX, labelY);
+    ctx.textAlign = 'center';
+    ctx.fillText(labels[1], gX + gW / 2, labelY);
+    ctx.textAlign = 'right';
+    ctx.fillText(labels[2], gX + gW, labelY);
+
+    ctx.font = '600 9px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = isDark ? '#cbd5e1' : '#475569';
+    ctx.fillText(langText('أدنى', 'Le plus bas'), gX, gY - 6);
+    ctx.textAlign = 'center';
+    ctx.fillText(langText('متوسط', 'Moyenne'), gX + gW / 2, gY - 6);
+    ctx.textAlign = 'right';
+    ctx.fillText(langText('أعلى', 'Le plus élevé'), gX + gW, gY - 6);
+  }
+
+  ctx.restore();
+}
+
 async function exportMapAsPNG() {
   const mapEl = document.getElementById('map');
   if (!mapEl) {
@@ -5820,7 +6061,9 @@ async function exportMapAsPNG() {
 
     const labelSelectors = [
       '.leaflet-marker-pane .province-label',
-      '.leaflet-marker-pane .commune-label'
+      '.leaflet-marker-pane .commune-label',
+      '.leaflet-marker-pane .province-value-label',
+      '.leaflet-marker-pane .commune-value-label'
     ];
     const labelEls = Array.from(mapEl.querySelectorAll(labelSelectors.join(',')));
     for (const wrapper of labelEls) {
@@ -5838,7 +6081,10 @@ async function exportMapAsPNG() {
       const cs       = window.getComputedStyle(inner);
       const fontSize = parseFloat(cs.fontSize) || 11;
       const color    = cs.color || '#333';
-      const isProvince = wrapper.classList.contains('province-label');
+      const isProvince = wrapper.classList.contains('province-label') || wrapper.classList.contains('province-value-label');
+      const mapThemeIsDark = isDarkTheme();
+      const adaptiveTextColor = mapThemeIsDark ? '#f8fafc' : '#0f172a';
+      const adaptiveOutlineColor = mapThemeIsDark ? 'rgba(0,0,0,0.9)' : 'rgba(255,255,255,0.86)';
 
       /* Rotation from inline style (transform: rotate(Xdeg)) */
       const transformStr = inner.style.transform || cs.transform || '';
@@ -5851,14 +6097,14 @@ async function exportMapAsPNG() {
       if (rotateDeg) ctx.rotate(rotateDeg * Math.PI / 180);
 
       ctx.font        = `${isProvince ? 'bold ' : ''}${fontSize}px 'Tajawal', Arial, sans-serif`;
-      ctx.fillStyle   = color;
+      ctx.fillStyle   = color || adaptiveTextColor;
       ctx.textAlign   = 'center';
       ctx.textBaseline = 'middle';
       ctx.direction   = 'rtl';
 
-      /* White halo for readability */
-      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-      ctx.lineWidth   = isProvince ? 3.5 : 2.5;
+      /* Adapt contour to the map background for readable export labels */
+      ctx.strokeStyle = adaptiveOutlineColor;
+      ctx.lineWidth   = isProvince ? 4.2 : 3.1;
       ctx.lineJoin    = 'round';
 
       /* Multi-line support: split on newlines or word-wrap */
@@ -5932,6 +6178,8 @@ async function exportMapAsPNG() {
        If markersRawGroup is used (no clustering), they appear in overlay SVG. */
     const rawMarkerSvgs = Array.from(mapEl.querySelectorAll('.leaflet-overlay-pane svg circle, .leaflet-overlay-pane svg path[d]'));
     /* These are already inside the SVG captured in step 3, nothing extra needed. */
+
+    drawMapExportOverlay(ctx, mapW, mapH, map);
 
     /* --- Download --- */
     const now      = new Date();

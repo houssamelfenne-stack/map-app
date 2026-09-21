@@ -1923,6 +1923,16 @@ body.lang-ar .pivot-table-commune {
   z-index: 100;
 }
 
+.province-value-label,
+.commune-value-label {
+  color: #0f172a;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  pointer-events: none;
+  z-index: 120;
+}
+
 .area-label {
   background: rgba(255, 255, 255, 0.92);
   padding: 3px 8px;
@@ -1940,6 +1950,27 @@ body.lang-ar .pivot-table-commune {
   transform: none;
   transform-origin: center;
   letter-spacing: 0.2px;
+}
+
+.province-value-label-inner,
+.commune-value-label-inner {
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(15, 23, 42, 0.2);
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.22);
+  padding: 5px 10px;
+  border-radius: 999px;
+  min-width: 28px;
+  line-height: 1.1;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.province-value-label-inner {
+  font-size: 18px;
+}
+
+.commune-value-label-inner {
+  font-size: 14px;
 }
 
 .area-label-province {
@@ -2171,26 +2202,57 @@ body[data-theme="dark"] .loading-progress-track {
 
 body[data-theme="dark"] .area-label {
   background: rgba(15, 23, 42, 0.88);
-  color: #e2e8f0;
+  color: #f8fafc;
   border-color: rgba(148, 163, 184, 0.35);
+  box-shadow: 0 2px 10px rgba(2, 6, 23, 0.42);
+}
+
+body[data-theme="dark"] .province-value-label-inner,
+body[data-theme="dark"] .commune-value-label-inner {
+  background: rgba(15, 23, 42, 0.92);
+  border-color: rgba(24, 24, 27, 0.85);
+  color: #f8fafc;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 3px 14px rgba(2, 6, 23, 0.55);
+  -webkit-text-stroke: 0.8px rgba(0, 0, 0, 0.82);
+  text-shadow:
+    -1px -1px 0 rgba(0, 0, 0, 0.82),
+     1px -1px 0 rgba(0, 0, 0, 0.82),
+    -1px  1px 0 rgba(0, 0, 0, 0.82),
+     1px  1px 0 rgba(0, 0, 0, 0.82),
+     0 0 3px rgba(0, 0, 0, 0.65);
 }
 
 body[data-theme="dark"] .area-label-province {
-  color: #e2e8f0;
+  color: #f8fafc;
+  -webkit-text-stroke: 0.9px rgba(0, 0, 0, 0.9);
+  paint-order: stroke fill;
   text-shadow:
-    -1px -1px 0 rgba(15, 23, 42, 0.95),
-     1px -1px 0 rgba(15, 23, 42, 0.95),
-    -1px  1px 0 rgba(15, 23, 42, 0.95),
-     1px  1px 0 rgba(15, 23, 42, 0.95),
-     0 0 2px rgba(15, 23, 42, 0.85);
+    -1px -1px 0 rgba(0, 0, 0, 0.9),
+     1px -1px 0 rgba(0, 0, 0, 0.9),
+    -1px  1px 0 rgba(0, 0, 0, 0.9),
+     1px  1px 0 rgba(0, 0, 0, 0.9),
+     0 0 3px rgba(0, 0, 0, 0.7);
 }
 
 body[data-theme="dark"] .area-label-commune {
   background: transparent;
   border: none;
   box-shadow: none;
-  color: #cbd5e1;
-  text-shadow: 0 1px 1px rgba(15, 23, 42, 0.9);
+  color: #f8fafc;
+  -webkit-text-stroke: 0.8px rgba(0, 0, 0, 0.9);
+  paint-order: stroke fill;
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.7), 0 1px 1px rgba(0, 0, 0, 0.8);
+}
+
+body[data-theme="dark"] .province-label,
+body[data-theme="dark"] .commune-label {
+  color: #f8fafc;
+  text-shadow:
+    -1px -1px 0 rgba(0, 0, 0, 0.86),
+     1px -1px 0 rgba(0, 0, 0, 0.86),
+    -1px  1px 0 rgba(0, 0, 0, 0.86),
+     1px  1px 0 rgba(0, 0, 0, 0.86),
+     0 0 3px rgba(0, 0, 0, 0.75);
 }
 
 body[data-theme="dark"] .leaflet-container {
