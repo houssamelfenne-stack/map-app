@@ -5835,37 +5835,56 @@ function getExportLegendValues() {
   };
 }
 
-function drawMapExportOverlay(ctx, mapW, mapH, mapRef) {
+async function loadExportLogoImage() {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = 'logo-GST.png';
+  });
+}
+
+function drawMapExportOverlay(ctx, mapW, mapH, mapRef, logoImage = null) {
   const legendData = getExportLegendValues();
   const isDark = isDarkTheme();
-  const margin = 18;
-  const panelW = Math.min(440, Math.max(300, mapW * 0.42));
-  const panelH = legendData ? 170 : 120;
-  const panelX = Math.max(12, mapW - panelW - margin);
-  const panelY = Math.max(12, mapH - panelH - margin);
+  const panelX = 18;
+  const panelY = Math.max(12, mapH - 132);
+  const panelW = Math.min(260, Math.max(220, mapW * 0.22));
+  const panelH = legendData ? 116 : 90;
+
+  if (logoImage) {
+    const targetW = Math.min(120, mapW * 0.11);
+    const targetH = (logoImage.height / logoImage.width) * targetW;
+    const x = mapW - targetW - 22;
+    const y = 20;
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.drawImage(logoImage, x, y, targetW, targetH);
+    ctx.restore();
+  }
 
   ctx.save();
-  ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.92)' : 'rgba(255,255,255,0.9)';
-  drawRoundedRect(ctx, panelX, panelY, panelW, panelH, 14);
+  ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.72)' : 'rgba(255,255,255,0.86)';
+  drawRoundedRect(ctx, panelX, panelY, panelW, panelH, 12);
   ctx.fill();
-  ctx.strokeStyle = isDark ? 'rgba(148,163,184,0.35)' : 'rgba(15,23,42,0.12)';
+  ctx.strokeStyle = isDark ? 'rgba(148,163,184,0.32)' : 'rgba(15,23,42,0.12)';
   ctx.lineWidth = 1;
   ctx.stroke();
 
   const title = legendData?.fieldLabel
-    ? `${langText('المفتاح', 'Légende')} : ${legendData.fieldLabel}`
-    : langText('المفتاح', 'Légende');
-  ctx.fillStyle = isDark ? '#e2e8f0' : '#0f172a';
-  ctx.font = '700 15px Arial';
-  ctx.textAlign = 'left';
+    ? `${langText('المؤشر', 'Indicateur')} : ${legendData.fieldLabel}`
+    : langText('المؤشر', 'Indicateur');
+  ctx.fillStyle = isDark ? '#f8fafc' : '#0f172a';
+  ctx.font = '700 12px Arial';
+  ctx.textAlign = 'right';
   ctx.direction = 'rtl';
-  ctx.fillText(title, panelX + 16, panelY + 24);
+  ctx.fillText(title, panelX + panelW - 12, panelY + 18);
 
   const filterText = getExportMapFilterSummary();
-  ctx.font = '600 10px Arial';
+  ctx.font = '600 9px Arial';
   ctx.fillStyle = isDark ? '#cbd5e1' : '#334155';
-  ctx.textAlign = 'left';
-  ctx.fillText(filterText, panelX + 16, panelY + 42, panelW - 32);
+  ctx.textAlign = 'right';
+  ctx.fillText(filterText, panelX + panelW - 12, panelY + 34, panelW - 24);
 
   const bounds = mapRef.getBounds();
   const centerLat = (bounds.getNorth() + bounds.getSouth()) / 2;
@@ -5873,19 +5892,12 @@ function drawMapExportOverlay(ctx, mapW, mapH, mapRef) {
   const physicalCm = (mapW / 96) * 2.54;
   const kmPerCm = physicalCm > 0 ? (widthKm / physicalCm) : 0;
   const scaleText = `1 cm = ${Number.isFinite(kmPerCm) && kmPerCm > 0 ? kmPerCm.toFixed(1) : '—'} km`;
-  const scaleLabel = langText('المقياس', 'Échelle');
-  ctx.fillStyle = isDark ? '#94a3b8' : '#475569';
-  ctx.font = '600 10px Arial';
-  ctx.fillText(scaleLabel, panelX + 16, panelY + 62);
-  ctx.fillStyle = isDark ? '#f8fafc' : '#0f172a';
-  ctx.fillText(scaleText, panelX + 16, panelY + 78);
 
   if (legendData) {
-    const fieldLabel = legendData.fieldLabel || langText('قيمة المؤشر', 'Valeur de l’indicateur');
-    const gX = panelX + 16;
-    const gY = panelY + 92;
-    const gW = panelW - 32;
-    const barHeight = 12;
+    const gX = panelX + 12;
+    const gY = panelY + 44;
+    const gW = panelW - 24;
+    const barHeight = 10;
     const gradient = ctx.createLinearGradient(gX, gY, gX + gW, gY);
     gradient.addColorStop(0, legendData.minColor);
     gradient.addColorStop(0.5, legendData.midColor);
@@ -5894,34 +5906,45 @@ function drawMapExportOverlay(ctx, mapW, mapH, mapRef) {
     drawRoundedRect(ctx, gX, gY, gW, barHeight, 5);
     ctx.fill();
 
+    ctx.fillStyle = isDark ? '#e2e8f0' : '#0f172a';
+    ctx.font = '600 8px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText(langText('أدنى', 'Min'), gX, gY - 7);
+    ctx.textAlign = 'center';
+    ctx.fillText(langText('متوسط', 'Moyenne'), gX + gW / 2, gY - 7);
+    ctx.textAlign = 'right';
+    ctx.fillText(langText('أعلى', 'Max'), gX + gW, gY - 7);
+
     const valueStyle = { min: legendData.min, mid: legendData.mid, max: legendData.max };
     const labels = [
-      formatFieldValueForDisplay(valueStyle.min, fieldLabel),
-      formatFieldValueForDisplay(valueStyle.mid, fieldLabel),
-      formatFieldValueForDisplay(valueStyle.max, fieldLabel)
+      formatFieldValueForDisplay(valueStyle.min, legendData.fieldLabel || langText('المؤشر', 'Indicateur')),
+      formatFieldValueForDisplay(valueStyle.mid, legendData.fieldLabel || langText('المؤشر', 'Indicateur')),
+      formatFieldValueForDisplay(valueStyle.max, legendData.fieldLabel || langText('المؤشر', 'Indicateur'))
     ];
 
-    const labelY = gY + 24;
-    ctx.fillStyle = isDark ? '#e2e8f0' : '#334155';
-    ctx.font = '700 9px Arial';
+    const labelY = gY + 22;
+    ctx.font = '700 8px Arial';
     ctx.textAlign = 'left';
     ctx.fillText(labels[0], gX, labelY);
     ctx.textAlign = 'center';
     ctx.fillText(labels[1], gX + gW / 2, labelY);
     ctx.textAlign = 'right';
     ctx.fillText(labels[2], gX + gW, labelY);
-
-    ctx.font = '600 9px Arial';
-    ctx.textAlign = 'left';
-    ctx.fillStyle = isDark ? '#cbd5e1' : '#475569';
-    ctx.fillText(langText('أدنى', 'Le plus bas'), gX, gY - 6);
-    ctx.textAlign = 'center';
-    ctx.fillText(langText('متوسط', 'Moyenne'), gX + gW / 2, gY - 6);
-    ctx.textAlign = 'right';
-    ctx.fillText(langText('أعلى', 'Le plus élevé'), gX + gW, gY - 6);
   }
 
+  ctx.fillStyle = isDark ? '#cbd5e1' : '#334155';
+  ctx.font = '600 9px Arial';
+  ctx.textAlign = 'right';
+  ctx.fillText(langText('المقياس', 'Échelle'), panelX + panelW - 12, panelY + 86);
+  ctx.fillStyle = isDark ? '#f8fafc' : '#0f172a';
+  ctx.fillText(scaleText, panelX + panelW - 12, panelY + 98);
+
   ctx.restore();
+
+  ctx.fillStyle = 'rgba(255,255,255,0.8)';
+  ctx.font = '600 11px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('Direction des soins de santé primaires, prévention et promotion de la santé 2026', mapW / 2, mapH - 14);
 }
 
 async function exportMapAsPNG() {
@@ -6179,7 +6202,8 @@ async function exportMapAsPNG() {
     const rawMarkerSvgs = Array.from(mapEl.querySelectorAll('.leaflet-overlay-pane svg circle, .leaflet-overlay-pane svg path[d]'));
     /* These are already inside the SVG captured in step 3, nothing extra needed. */
 
-    drawMapExportOverlay(ctx, mapW, mapH, map);
+    const exportLogoImage = await loadExportLogoImage();
+    drawMapExportOverlay(ctx, mapW, mapH, map, exportLogoImage);
 
     /* --- Download --- */
     const now      = new Date();

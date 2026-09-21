@@ -839,6 +839,19 @@ body.lang-fr #app-container.with-pivot #pivotPanel {
   height: 100%;
 }
 
+#mapWatermarkLogo {
+  position: absolute;
+  top: 14px;
+  right: 18px;
+  width: 130px;
+  height: auto;
+  z-index: 700;
+  pointer-events: none;
+  opacity: 1;
+  display: block;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35));
+}
+
 .route-info-panel {
   position: absolute;
   top: 84px;
