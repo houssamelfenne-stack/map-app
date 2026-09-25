@@ -110,6 +110,7 @@ const UI_TRANSLATIONS = {
     totalNetworksLabel: 'الشبكات:',
     totalRegionsLabel: 'الجهات:',
     totalProvincesLabel: 'الأقاليم:',
+    totalCommunesLabel: 'الجماعات:',
     totalPopulationLabel: 'عدد السكان:',
     togglePivotBtnText: 'احصائيات العرض الصحي',
     togglePivotProvinceBtnText: 'احصائيات الاقاليم',
@@ -125,6 +126,7 @@ const UI_TRANSLATIONS = {
     helpTitle: 'المساعدة والاختصارات',
     routeTitle: 'حساب المسافة والوقت بين مؤسستين',
     captureTitle: 'حفظ صورة الخريطة PNG',
+    printMapTitle: 'طباعة الخريطة كصورة',
     shareTitle: 'مشاركة الخريطة',
     appLoaded: 'تم تحميل البيانات بنجاح',
     appLoadError: 'حدث خطأ في التحميل',
@@ -157,6 +159,7 @@ const UI_TRANSLATIONS = {
     totalNetworksLabel: 'Réseaux :',
     totalRegionsLabel: 'Régions :',
     totalProvincesLabel: 'Provinces :',
+    totalCommunesLabel: 'Communes :',
     totalPopulationLabel: 'Population :',
     togglePivotBtnText: 'Statistiques de l’offre de soins',
     togglePivotProvinceBtnText: 'Statistiques des provinces/préfectures',
@@ -749,6 +752,7 @@ function applyLanguageToStaticUi() {
   setElementText('totalNetworksLabel', t('totalNetworksLabel'));
   setElementText('totalRegionsLabel', t('totalRegionsLabel'));
   setElementText('totalProvincesLabel', t('totalProvincesLabel'));
+  setElementText('totalCommunesLabel', t('totalCommunesLabel'));
   setElementText('totalPopulationLabel', t('totalPopulationLabel'));
   setElementText('togglePivotBtnText', t('togglePivotBtnText'));
   setElementText('togglePivotProvinceBtnText', t('togglePivotProvinceBtnText'));
@@ -768,6 +772,9 @@ function applyLanguageToStaticUi() {
 
   const captureBtn = document.getElementById('captureMapBtn');
   if (captureBtn) captureBtn.title = t('captureTitle');
+
+  const printMapBtn = document.getElementById('printMapBtn');
+  if (printMapBtn) printMapBtn.title = t('printMapTitle');
 
   const shareBtn = document.getElementById('shareBtn');
   if (shareBtn) shareBtn.title = t('shareTitle');
@@ -3540,6 +3547,7 @@ function updateHeaderStats() {
   const networks = new Set(visibleInstitutions.map(i => getResValue(i, ['reseau', 'abr_reseau'])).filter(Boolean)).size;
   const regions = new Set(visibleInstitutions.map(getInstitutionRegion).filter(Boolean)).size;
   const provinces = new Set(visibleInstitutions.map(getInstitutionProvince).filter(Boolean)).size;
+  const communes = new Set(visibleInstitutions.map(getInstitutionCommune).filter(Boolean)).size;
   const filteredPopulationDetails = getFilteredPopulationBreakdown();
   const hasGeographicFilter = !!(currentRegionFilter || currentProvinceFilter || currentCommuneFilter);
   const hasRegionOnlyFilter = !!(currentRegionFilter && !currentProvinceFilter && !currentCommuneFilter);
@@ -3556,6 +3564,7 @@ function updateHeaderStats() {
   document.getElementById('totalNetworks').textContent = formatIntegerForUi(networks);
   document.getElementById('totalRegions').textContent = formatIntegerForUi(regions);
   document.getElementById('totalProvinces').textContent = formatIntegerForUi(provinces);
+  document.getElementById('totalCommunes').textContent = formatIntegerForUi(communes);
   document.getElementById('totalPopulation').textContent = formatIntegerForUi(population);
 
   updateLandingStats({
@@ -5947,34 +5956,17 @@ function drawMapExportOverlay(ctx, mapW, mapH, mapRef, logoImage = null) {
   ctx.fillText('Direction des soins de santé primaires, prévention et promotion de la santé 2026', mapW / 2, mapH - 14);
 }
 
-async function exportMapAsPNG() {
+async function buildMapSnapshotBlob() {
   const mapEl = document.getElementById('map');
   if (!mapEl) {
     showToast(langText('عنصر الخريطة غير موجود', 'Element introuvable'), 'error');
-    return;
+    return null;
   }
-
-  /* -------------------------------------------------------
-     Draw the map directly onto an offscreen canvas.
-     We do NOT use html2canvas at all  it can't handle
-     Leaflet tile transforms reliably.
-     Instead we:
-       1. Collect every <img class="leaflet-tile"> that is loaded.
-       2. Use getBoundingClientRect() to find its screen position
-          relative to the map container (no transform parsing needed).
-       3. Draw SVG overlays (GeoJSON) via the existing <canvas> or
-          <svg> elements inside the map.
-       4. Draw circle markers from the Leaflet canvas pane.
-  ------------------------------------------------------- */
 
   const overlay = document.getElementById('loadingOverlay');
   const prevOverlay = overlay?.style?.display ?? '';
   const hiddenRestore = [];
 
-  const hideEl = (el) => {
-    hiddenRestore.push({ el, vis: el.style.visibility });
-    el.style.visibility = 'hidden';
-  };
   const restoreHidden = () => {
     hiddenRestore.forEach(({ el, vis }) => { el.style.visibility = vis; });
     hiddenRestore.length = 0;
@@ -5982,26 +5974,22 @@ async function exportMapAsPNG() {
 
   try {
     if (overlay) overlay.style.display = 'none';
-
-    /* Wait for any pending tile loads */
     await new Promise((r) => setTimeout(r, 200));
 
-    const mapRect  = mapEl.getBoundingClientRect();
-    const mapW     = Math.round(mapRect.width)  || mapEl.clientWidth  || 800;
-    const mapH     = Math.round(mapRect.height) || mapEl.clientHeight || 600;
-    const scale    = 2;
+    const mapRect = mapEl.getBoundingClientRect();
+    const mapW = Math.round(mapRect.width) || mapEl.clientWidth || 800;
+    const mapH = Math.round(mapRect.height) || mapEl.clientHeight || 600;
+    const scale = 2;
 
     const offscreen = document.createElement('canvas');
-    offscreen.width  = mapW * scale;
+    offscreen.width = mapW * scale;
     offscreen.height = mapH * scale;
     const ctx = offscreen.getContext('2d');
     ctx.scale(scale, scale);
 
-    /* --- 1. Background fill --- */
     ctx.fillStyle = '#e8e0d8';
     ctx.fillRect(0, 0, mapW, mapH);
 
-    /* --- 2. Raster tile layers --- */
     const drawImage = (img, dx, dy, dw, dh) => {
       try { ctx.drawImage(img, dx, dy, dw, dh); } catch (_) {}
     };
@@ -6010,28 +5998,21 @@ async function exportMapAsPNG() {
       .filter((img) => img.complete && img.naturalWidth > 0 && img.style.display !== 'none');
 
     for (const tile of tiles) {
-      const r  = tile.getBoundingClientRect();
+      const r = tile.getBoundingClientRect();
       const dx = r.left - mapRect.left;
-      const dy = r.top  - mapRect.top;
-      const dw = r.width;
-      const dh = r.height;
-      drawImage(tile, dx, dy, dw, dh);
+      const dy = r.top - mapRect.top;
+      drawImage(tile, dx, dy, r.width, r.height);
     }
 
-    /* --- 3. SVG overlay layers (GeoJSON polygons) --- */
-    /* Use Leaflet's own coordinate system to compute the correct viewBox.
-       map.containerPointToLayerPoint([0,0]) gives the top-left of the
-       visible area in SVG/layer-point coordinates, which is exactly the
-       viewBox origin we need. */
-    const mapSize   = map.getSize();           // {x: px, y: px} of container
-    const topLeft   = map.containerPointToLayerPoint(L.point(0, 0));
-    const svgVbX    = topLeft.x;
-    const svgVbY    = topLeft.y;
-    const svgVbW    = mapSize.x;
-    const svgVbH    = mapSize.y;
+    const mapSize = map.getSize();
+    const topLeft = map.containerPointToLayerPoint(L.point(0, 0));
+    const svgVbX = topLeft.x;
+    const svgVbY = topLeft.y;
+    const svgVbW = mapSize.x;
+    const svgVbH = mapSize.y;
 
     const seenSvg = new Set();
-    const svgEls  = Array.from(mapEl.querySelectorAll('.leaflet-overlay-pane svg'));
+    const svgEls = Array.from(mapEl.querySelectorAll('.leaflet-overlay-pane svg'));
     for (const svg of svgEls) {
       if (seenSvg.has(svg)) continue;
       seenSvg.add(svg);
@@ -6040,46 +6021,38 @@ async function exportMapAsPNG() {
       const clone = svg.cloneNode(true);
       clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
       clone.setAttribute('viewBox', `${svgVbX} ${svgVbY} ${svgVbW} ${svgVbH}`);
-      clone.setAttribute('width',  mapW);
+      clone.setAttribute('width', mapW);
       clone.setAttribute('height', mapH);
       clone.style.transform = 'none';
 
-      const svgStr  = new XMLSerializer().serializeToString(clone);
+      const svgStr = new XMLSerializer().serializeToString(clone);
       const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
-      const svgUrl  = URL.createObjectURL(svgBlob);
+      const svgUrl = URL.createObjectURL(svgBlob);
 
       await new Promise((resolve) => {
         const img = new Image();
-        img.onload  = () => { drawImage(img, 0, 0, mapW, mapH); URL.revokeObjectURL(svgUrl); resolve(); };
+        img.onload = () => { drawImage(img, 0, 0, mapW, mapH); URL.revokeObjectURL(svgUrl); resolve(); };
         img.onerror = () => { URL.revokeObjectURL(svgUrl); resolve(); };
         img.src = svgUrl;
       });
     }
 
-    /* --- 4. Leaflet canvas pane (circle markers) --- */
     const canvasEls = Array.from(mapEl.querySelectorAll('.leaflet-canvas-pane canvas, canvas.leaflet-zoom-animated'));
     for (const c of canvasEls) {
-      const r  = c.getBoundingClientRect();
+      const r = c.getBoundingClientRect();
       const dx = r.left - mapRect.left;
-      const dy = r.top  - mapRect.top;
-      const dw = r.width;
-      const dh = r.height;
-      if (dw < 1 || dh < 1) continue;
-      try { ctx.drawImage(c, dx, dy, dw, dh); } catch (_) {}
+      const dy = r.top - mapRect.top;
+      if (r.width < 1 || r.height < 1) continue;
+      try { ctx.drawImage(c, dx, dy, r.width, r.height); } catch (_) {}
     }
 
-    /* --- 5. Marker icons (img icons) --- */
     const markerImgs = Array.from(mapEl.querySelectorAll('.leaflet-marker-pane img.leaflet-marker-icon'));
     for (const img of markerImgs) {
       if (!img.complete || !img.naturalWidth) continue;
-      const r  = img.getBoundingClientRect();
-      const dx = r.left - mapRect.left;
-      const dy = r.top  - mapRect.top;
-      drawImage(img, dx, dy, r.width, r.height);
+      const r = img.getBoundingClientRect();
+      drawImage(img, r.left - mapRect.left, r.top - mapRect.top, r.width, r.height);
     }
 
-    /* --- 6. Province & commune text labels (divIcon HTML elements) --- */
-    /* Ensure Arabic font is loaded before drawing */
     try { await document.fonts.load('bold 14px Tajawal'); await document.fonts.load('12px Tajawal'); } catch (_) {}
 
     const labelSelectors = [
@@ -6091,25 +6064,19 @@ async function exportMapAsPNG() {
     const labelEls = Array.from(mapEl.querySelectorAll(labelSelectors.join(',')));
     for (const wrapper of labelEls) {
       const inner = wrapper.querySelector('.area-label') || wrapper;
-      const text  = inner.textContent?.trim();
+      const text = inner.textContent?.trim();
       if (!text) continue;
-
-      /* Position: center of the wrapper div */
       const wr = wrapper.getBoundingClientRect();
       if (wr.width < 1 && wr.height < 1) continue;
-      const cx = wr.left - mapRect.left + wr.width  / 2;
-      const cy = wr.top  - mapRect.top  + wr.height / 2;
-
-      /* Styles */
-      const cs       = window.getComputedStyle(inner);
+      const cx = wr.left - mapRect.left + wr.width / 2;
+      const cy = wr.top - mapRect.top + wr.height / 2;
+      const cs = window.getComputedStyle(inner);
       const fontSize = parseFloat(cs.fontSize) || 11;
-      const color    = cs.color || '#333';
+      const color = cs.color || '#333';
       const isProvince = wrapper.classList.contains('province-label') || wrapper.classList.contains('province-value-label');
       const mapThemeIsDark = isDarkTheme();
       const adaptiveTextColor = mapThemeIsDark ? '#f8fafc' : '#0f172a';
       const adaptiveOutlineColor = mapThemeIsDark ? 'rgba(0,0,0,0.9)' : 'rgba(255,255,255,0.86)';
-
-      /* Rotation from inline style (transform: rotate(Xdeg)) */
       const transformStr = inner.style.transform || cs.transform || '';
       let rotateDeg = 0;
       const rotMatch = transformStr.match(/rotate\(\s*(-?[\d.]+)deg\s*\)/i);
@@ -6118,22 +6085,17 @@ async function exportMapAsPNG() {
       ctx.save();
       ctx.translate(cx, cy);
       if (rotateDeg) ctx.rotate(rotateDeg * Math.PI / 180);
-
-      ctx.font        = `${isProvince ? 'bold ' : ''}${fontSize}px 'Tajawal', Arial, sans-serif`;
-      ctx.fillStyle   = color || adaptiveTextColor;
-      ctx.textAlign   = 'center';
+      ctx.font = `${isProvince ? 'bold ' : ''}${fontSize}px 'Tajawal', Arial, sans-serif`;
+      ctx.fillStyle = color || adaptiveTextColor;
+      ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.direction   = 'rtl';
-
-      /* Adapt contour to the map background for readable export labels */
+      ctx.direction = 'rtl';
       ctx.strokeStyle = adaptiveOutlineColor;
-      ctx.lineWidth   = isProvince ? 4.2 : 3.1;
-      ctx.lineJoin    = 'round';
-
-      /* Multi-line support: split on newlines or word-wrap */
+      ctx.lineWidth = isProvince ? 4.2 : 3.1;
+      ctx.lineJoin = 'round';
       const lines = text.split(/\n/).flatMap((line) => {
         const words = line.split(/\s+/);
-        const max   = isProvince ? 14 : 10;
+        const max = isProvince ? 14 : 10;
         const result = [];
         let cur = '';
         for (const w of words) {
@@ -6147,7 +6109,6 @@ async function exportMapAsPNG() {
         if (cur) result.push(cur.trim());
         return result;
       });
-
       const lineH = fontSize * 1.35;
       const startY = -((lines.length - 1) * lineH) / 2;
       lines.forEach((line, i) => {
@@ -6155,17 +6116,15 @@ async function exportMapAsPNG() {
         ctx.strokeText(line, 0, y);
         ctx.fillText(line, 0, y);
       });
-
       ctx.restore();
     }
+
     const clusterEls = Array.from(mapEl.querySelectorAll('.marker-cluster'));
     for (const cl of clusterEls) {
-      const r  = cl.getBoundingClientRect();
+      const r = cl.getBoundingClientRect();
       if (r.width < 1 || r.height < 1) continue;
-      const cx = r.left - mapRect.left + r.width  / 2;
-      const cy = r.top  - mapRect.top  + r.height / 2;
-
-      /* Outer ring */
+      const cx = r.left - mapRect.left + r.width / 2;
+      const cy = r.top - mapRect.top + r.height / 2;
       const outerR = r.width / 2;
       const cs = window.getComputedStyle(cl);
       const outerColor = cs.backgroundColor || 'rgba(241,211,87,0.6)';
@@ -6173,67 +6132,133 @@ async function exportMapAsPNG() {
       ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
       ctx.fillStyle = outerColor.replace(/[\d.]+\)$/, '0.5)');
       ctx.fill();
-
-      /* Inner circle */
       const innerDiv = cl.querySelector('div');
-      const innerR   = outerR * 0.65;
-      const innerCs  = innerDiv ? window.getComputedStyle(innerDiv) : cs;
+      const innerR = outerR * 0.65;
+      const innerCs = innerDiv ? window.getComputedStyle(innerDiv) : cs;
       ctx.beginPath();
       ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
       ctx.fillStyle = innerCs.backgroundColor || 'rgba(241,211,87,0.9)';
       ctx.fill();
-
-      /* Count text */
       const span = cl.querySelector('span');
       const label = span ? span.textContent.trim() : '';
       if (label) {
         const fontSize = Math.max(10, Math.round(innerR * 0.85));
-        ctx.font        = `bold ${fontSize}px sans-serif`;
-        ctx.fillStyle   = '#333';
-        ctx.textAlign   = 'center';
+        ctx.font = `bold ${fontSize}px sans-serif`;
+        ctx.fillStyle = '#333';
+        ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(label, cx, cy);
       }
     }
 
-    /* --- 7. Individual circleMarkers (SVG path elements in overlay pane) --- */
-    /* Already captured in step 3 via SVG serialization.
-       If markersRawGroup is used (no clustering), they appear in overlay SVG. */
-    const rawMarkerSvgs = Array.from(mapEl.querySelectorAll('.leaflet-overlay-pane svg circle, .leaflet-overlay-pane svg path[d]'));
-    /* These are already inside the SVG captured in step 3, nothing extra needed. */
-
     const exportLogoImage = await loadExportLogoImage();
     drawMapExportOverlay(ctx, mapW, mapH, map, exportLogoImage);
 
-    /* --- Download --- */
-    const now      = new Date();
-    const datePart = now.toISOString().slice(0, 10);
-    const timePart = `${String(now.getHours()).padStart(2,'0')}-${String(now.getMinutes()).padStart(2,'0')}`;
-    const filename = `map_${datePart}_${timePart}.png`;
-
-    offscreen.toBlob((blob) => {
-      if (!blob) {
-        showToast(langText('فشل إنشاء الصورة', 'Echec de creation de l\'image'), 'error');
-        return;
-      }
-      const url  = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href     = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
-      showToast(langText('تم حفظ صورة الخريطة PNG', 'Carte exportee en PNG'), 'success');
-    }, 'image/png');
-
+    return new Promise((resolve) => {
+      offscreen.toBlob((blob) => resolve(blob || null), 'image/png');
+    });
   } catch (err) {
-    console.error('exportMapAsPNG error:', err);
+    console.error('buildMapSnapshotBlob error:', err);
     showToast(langText('تعذر حفظ الصورة', 'Impossible d\'exporter la carte'), 'error');
+    return null;
   } finally {
     restoreHidden();
     if (overlay) overlay.style.display = prevOverlay;
   }
+}
+
+async function printMapScreenshot() {
+  const blob = await buildMapSnapshotBlob();
+  if (!blob) return;
+
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Failed to read image blob for print'));
+    reader.readAsDataURL(blob);
+  }).catch((error) => {
+    console.error('printMapScreenshot dataURL error:', error);
+    return null;
+  });
+
+  if (!dataUrl) {
+    showToast(langText('تعذر تجهيز صورة الطباعة', 'Impossible de préparer l’image d’impression'), 'error');
+    return;
+  }
+
+  const printWindow = window.open('', '_blank', 'width=1200,height=900');
+  if (!printWindow) {
+    showToast(langText('تحتاج إلى السماح بفتح نافذة جديدة', 'Autoriser la fenêtre d’impression'), 'warning');
+    return;
+  }
+
+  const title = isFrenchLanguage()
+    ? 'la carte de suivi et évaluation des programmes de santé'
+    : 'خريطة المتابعة والتقييم لبرامج الصحة';
+  const description = isFrenchLanguage()
+    ? 'Carte de suivi et d’évaluation des programmes de santé'
+    : 'خريطة متابعة وتقييم برامج الصحة';
+  const regionLabel = langText('الجهة', 'Région');
+  const provinceLabel = langText('الإقليم', 'Province');
+  const communeLabel = langText('الجماعة', 'Commune');
+  const indicatorLabel = langText('المؤشر', 'Indicateur');
+  const timestampLabel = langText('تاريخ ووقت الطباعة', 'Date et heure d’impression');
+  const allLabel = langText('الكل', 'Tous');
+  const dir = isFrenchLanguage() ? 'ltr' : 'rtl';
+  const regionValue = currentRegionFilter ? (isFrenchLanguage() ? currentRegionFilter : toArabicRegionName(currentRegionFilter)) : allLabel;
+  const provinceValue = currentProvinceFilter ? (isFrenchLanguage() ? currentProvinceFilter : toArabicProvinceName(currentProvinceFilter)) : allLabel;
+  const communeValue = currentCommuneFilter ? (isFrenchLanguage() ? currentCommuneFilter : toArabicCommuneName(currentCommuneFilter)) : allLabel;
+  const selectedIndicator = getExcelSelectedValueFieldLabel(getExcelColoringTargetLevel()) || allLabel;
+  const printTimestamp = new Intl.DateTimeFormat(isFrenchLanguage() ? 'fr-MA' : 'ar-MA', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(new Date());
+  const infoRows = [
+    { label: regionLabel, value: regionValue },
+    { label: provinceLabel, value: provinceValue },
+    { label: communeLabel, value: communeValue },
+    { label: indicatorLabel, value: selectedIndicator },
+    { label: timestampLabel, value: printTimestamp }
+  ];
+
+  const infoLines = infoRows.map((row) => {
+    const label = escapeHtml(String(row.label));
+    const value = escapeHtml(String(row.value));
+    return `<div class="meta-row"><span class="meta-label">${label}</span><span class="meta-separator">:</span><span class="meta-value">${value}</span></div>`;
+  }).join('');
+
+  const pageOrientation = window.innerWidth > window.innerHeight ? 'landscape' : 'portrait';
+  const pageFormat = window.innerWidth > 1500 || pageOrientation === 'landscape' ? 'A3' : 'A4';
+
+  const html = `<!DOCTYPE html><html lang="${isFrenchLanguage() ? 'fr' : 'ar'}" dir="${dir}"><head><meta charset="UTF-8"><title>${title}</title><style>@page { size: ${pageFormat} ${pageOrientation}; margin: 0; } html,body{margin:0;padding:0;width:100%;height:100%;background:#fff;font-family:Arial,sans-serif;color:#0f172a} body{display:block} .page{width:100%;min-height:100vh;box-sizing:border-box;background:#fff} .header{padding:12px 14px 10px;background:linear-gradient(135deg,#dff7e7,#bbf7d0 45%,#a7f3d0);color:#14532d;border-bottom:1px solid rgba(20,83,45,.12)} .header-title{margin:0;font-size:20px;font-weight:700;letter-spacing:.01em} .header-sub{margin:6px 0 0;font-size:12px;opacity:.8} .map-block{padding:0;margin:0} img{display:block;width:100%;height:auto;max-height:${pageOrientation === 'landscape' ? '76vh' : '68vh'};object-fit:contain;background:#fff} .meta{padding:8px 12px 12px;background:linear-gradient(180deg,#f5fff7,#ffffff);box-sizing:border-box;width:100%;display:flex;flex-direction:column;gap:4px;border-top:1px solid #dfeee0} .meta-row{display:flex;align-items:center;gap:8px;padding:3px 0;color:#334155;font-size:12px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .meta-label{font-weight:700;color:#14532d;min-width:96px;flex-shrink:0} .meta-separator{color:#398564;flex-shrink:0} .meta-value{flex:1;text-align:${isFrenchLanguage() ? 'left' : 'right'};font-weight:600;color:#1f2937;overflow:hidden;text-overflow:ellipsis} @media print{body{padding:0;margin:0}.page{width:100vw}.header-title{font-size:18px}.header-sub{font-size:11px}.meta-row{font-size:11px}} </style></head><body><div class="page"><div class="header"><h1 class="header-title">${escapeHtml(title)}</h1><p class="header-sub">${escapeHtml(description)}</p></div><div class="map-block"><img src="${dataUrl}" alt="${escapeHtml(title)}" onload="setTimeout(() => window.print(), 250);" /></div><div class="meta">${infoLines}</div></div></body></html>`;
+
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+
+  showToast(langText('تم تجهيز نافذة الطباعة', 'Fenêtre d’impression prête'), 'success');
+}
+
+async function exportMapAsPNG() {
+  const blob = await buildMapSnapshotBlob();
+  if (!blob) return;
+
+  const now = new Date();
+  const datePart = now.toISOString().slice(0, 10);
+  const timePart = `${String(now.getHours()).padStart(2,'0')}-${String(now.getMinutes()).padStart(2,'0')}`;
+  const filename = `map_${datePart}_${timePart}.png`;
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  showToast(langText('تم حفظ صورة الخريطة PNG', 'Carte exportee en PNG'), 'success');
 }
 
 function initLanding() {
@@ -6328,6 +6353,9 @@ function initUI() {
 
   // Capture map as PNG
   document.getElementById('captureMapBtn')?.addEventListener('click', exportMapAsPNG);
+
+  // Print map with captured image summary
+  document.getElementById('printMapBtn')?.addEventListener('click', printMapScreenshot);
 
   // Route mode toggle
   document.getElementById('routeModeBtn')?.addEventListener('click', toggleRouteMode);
